@@ -1,0 +1,83 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstset{
+    language=Python,
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+
+\title{Analisi Tecnica del Solver Gasdinamico Iterativo \\ \large Progetto GASFLASH}
+\author{Documentazione Generata da Antigravity}
+\date{Aprile 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduzione}
+Il file \texttt{iterative\_solver.py} costituisce il cuore computazionale dell'applicazione GASFLASH. Il suo obiettivo è risolvere il flusso quasi-monodimensionale stazionario di un gas ideale attraverso una serie di condotti con variazione di area, attrito (Fanno) e scambio termico (Rayleigh).
+
+\section{Architettura del Solver}
+Il solver utilizza un approccio \textbf{Shooting Method}. Poiché conosciamo le condizioni di ristagno all'ingresso ($P_{0,in}$, $T_{0,in}$) e la pressione ambiente all'uscita ($P_{amb}$), il solver deve "indovinare" il numero di Mach in ingresso ($M_{in}$) che soddisfi esattamente la condizione al contorno finale.
+
+\section{Analisi Dettagliata delle Funzioni}
+
+\subsection{Gestione Errori e Componenti}
+Dalla riga 41 alla 172, il codice definisce la logica per i singoli componenti:
+\begin{itemize}
+    \item \textbf{ChokedError}: Eccezione sollevata quando un condotto raggiunge il limite fisico di portata (Mach = 1).
+    \item \textbf{evaluate\_component}: Questa funzione agisce come un'interfaccia analitica. Per ogni tipo di condotto (convergente, divergente, Fanno, Rayleigh), calcola il Mach di uscita ($M_{out}$) e le perdite di pressione totale utilizzando le relazioni classiche della gasdinamica.
+\end{itemize}
+
+\subsection{La Pipeline (Righe 179-213)}
+La funzione \texttt{evaluate\_pipeline} concatena i componenti. Prende le uscite di un condotto e le usa come ingressi per il successivo. È qui che viene gestito il flag \texttt{force\_supersonic}, cruciale per permettere al flusso di accelerare oltre Mach 1 in un condotto divergente dopo una gola sonica.
+
+\subsection{Ricerca del Choking (Righe 220-238)}
+\texttt{find\_choked\_inlet\_mach} utilizza un metodo di bisezione per trovare il massimo Mach possibile all'ingresso prima che il sistema diventi fisicamente impossibile (strozzato). Questo valore definisce il limite superiore della capacità di portata del sistema.
+
+\subsection{Shooting Method Principale (Righe 290-614)}
+Questa è la parte più complessa del codice. Si divide in tre casi principali:
+\begin{enumerate}
+    \item \textbf{Caso Subsonico}: Se la pressione ambiente è alta, il solver usa \texttt{scipy.optimize.brentq} per trovare l'unico $M_{in}$ subsonico che porta alla pressione di uscita desiderata.
+    \item \textbf{Caso Choked}: Se la pressione ambiente è molto bassa, il sistema lavora alla massima portata ($M_{in}$ critico).
+    \item \textbf{Onde d'Urto (B3, Righe 554-614)}: Se il flusso è supersonico ma la contropressione è troppo alta per un'uscita supersonica pura, il codice cerca riga per riga (o meglio, condotto per condotto) il punto esatto dove inserire un'onda d'urto normale per bilanciare le pressioni.
+\end{enumerate}
+
+\subsection{Generazione Dati per Grafici (Righe 621-773)}
+\texttt{generate\_plot\_data} trasforma i risultati discreti dei componenti in array continui. Per ogni condotto, effettua una micro-integrazione spaziale per calcolare Mach, Pressione e Temperatura in ogni punto $x$, permettendo alla UI di mostrare curve fluide invece di semplici segmenti.
+
+\section{Dettagli Matematici}
+Il solver risolve il sistema accoppiato di equazioni differenziali:
+\begin{equation}
+    \frac{dM}{M} = \phi(M, f, q, dA)
+\end{equation}
+dove $\phi$ tiene conto contemporaneamente degli effetti di area, attrito e calore. Questo approccio è superiore ai solver commerciali semplificati perché gestisce correttamente il "collo di bottiglia" che può spostarsi da una gola fisica a una gola termica o d'attrito.
+
+\end{document}
