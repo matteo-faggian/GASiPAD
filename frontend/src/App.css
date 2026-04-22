@@ -263,6 +263,15 @@
   overflow: hidden;
 }
 
+.charts-container.stacked {
+  grid-template-columns: 1fr;
+  overflow-y: auto;
+}
+
+.charts-container.stacked .chart-wrapper {
+  min-height: 400px;
+}
+
 .chart-wrapper {
   background: var(--bg-panel);
   position: relative;

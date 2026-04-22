@@ -56,6 +56,8 @@ export function ResultsDashboard({ results }) {
     { x: d.x, y: d.mass_flow, type: 'scatter', mode: 'lines', name: 'Mass Flow', line: { color: '#06b6d4', width: 2 } }
   ];
 
+  const [isStacked, setIsStacked] = React.useState(false);
+
   return (
     <div className="results-panel animate-fade-in">
       <div className="results-header">
@@ -63,6 +65,14 @@ export function ResultsDashboard({ results }) {
           <span>📊 Simulation Results</span>
         </h3>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button 
+            className={`solver-toggle ${isStacked ? 'active' : ''}`}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', height: 'fit-content' }}
+            onClick={() => setIsStacked(!isStacked)}
+            title={isStacked ? "Switch to Grid View" : "Switch to Stacked View"}
+          >
+            {isStacked ? '🔲 Grid' : '📜 List'}
+          </button>
           <button 
             className="solver-toggle" 
             style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', height: 'fit-content' }}
@@ -92,7 +102,7 @@ export function ResultsDashboard({ results }) {
           {!results.warnings?.length && <span className="status-badge success">✅ Solved Successfully</span>}
         </div>
       </div>
-      <div className="charts-container">
+      <div className={`charts-container ${isStacked ? 'stacked' : ''}`}>
         <div className="chart-wrapper">
           <Plot 
             data={machData} 
