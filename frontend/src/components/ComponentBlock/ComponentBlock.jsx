@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2 } from 'lucide-react';
-import { COMPONENT_TYPES } from '../../utils/constants';
+import { COMPONENT_TYPES } from '../../utils/constants.jsx';
 
 export function ComponentBlock({ id, component, index, onUpdate, onRemove }) {
   const {
