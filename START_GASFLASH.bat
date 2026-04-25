@@ -13,23 +13,26 @@ echo.
 :: Inizializzazione
 set NEEDS_FULL_REBUILD=0
 set BEHIND_COUNT=0
-set REPO_URL=https://github.com/Matteobeo/Iterative-1D-Gasdynamic-Solver
-set API_URL=https://api.github.com/repos/Matteobeo/Iterative-1D-Gasdynamic-Solver/commits/main
+set REPO_NAME=Iterative-1D-Gasdynamic-Solver
+set REPO_URL=https://github.com/Matteobeo/!REPO_NAME!
+set API_URL=https://api.github.com/repos/Matteobeo/!REPO_NAME!/commits/main
 
 :: --- CONTROLLO AGGIORNAMENTI (SMART) ---
+echo [1/5] Controllo aggiornamenti...
+
 set GIT_AVAILABLE=0
 git --version >nul 2>&1
-if %ERRORLEVEL% EQU 0 set GIT_AVAILABLE=1
+if !ERRORLEVEL! EQU 0 set GIT_AVAILABLE=1
 
-if %GIT_AVAILABLE% EQU 1 (
-    echo [1/5] Controllo aggiornamenti via Git...
+if !GIT_AVAILABLE! EQU 1 (
+    echo [INFO] Utilizzo Git per il controllo...
     git fetch origin >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
+    if !ERRORLEVEL! EQU 0 (
         for /f "tokens=*" %%i in ('git rev-list HEAD..origin/main --count 2^>nul') do set BEHIND_COUNT=%%i
         if "!BEHIND_COUNT!"=="" set BEHIND_COUNT=0
         
         if !BEHIND_COUNT! GTR 0 (
-            echo [INFO] Aggiornamento Git rilevato (!BEHIND_COUNT! commit). Sincronizzazione...
+            echo [INFO] Aggiornamento Git rilevato (!BEHIND_COUNT! commit).
             git reset --hard origin/main >nul 2>&1
             git clean -fd >nul 2>&1
             set NEEDS_FULL_REBUILD=1
@@ -40,27 +43,26 @@ if %GIT_AVAILABLE% EQU 1 (
         echo [INFO] GitHub non raggiungibile. Procedo offline.
     )
 ) else (
-    echo [1/5] Git non trovato. Controllo SMART via GitHub API...
+    echo [INFO] Git non trovato. Controllo SMART ZIP...
     
-    :: Recupera SHA locale
     set LOCAL_SHA=none
     if exist .last_commit set /p LOCAL_SHA=<.last_commit
 
-    :: Recupera SHA remoto via PowerShell (silenzioso)
-    for /f "tokens=*" %%a in ('powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { (Invoke-RestMethod -Uri '%API_URL%').sha } catch { 'error' }"') do set REMOTE_SHA=%%a
+    :: PowerShell per SHA (Semplificato per evitare errori di escape)
+    set "PS_CMD=(Invoke-RestMethod -Uri '!API_URL!').sha"
+    for /f "usebackq tokens=*" %%a in (`powershell -NoProfile -Command "!PS_CMD!" 2^>nul`) do set REMOTE_SHA=%%a
 
-    if "!REMOTE_SHA!"=="error" (
+    if "!REMOTE_SHA!"=="" (
         echo [INFO] Impossibile verificare aggiornamenti (offline).
     ) else if NOT "!REMOTE_SHA!"=="!LOCAL_SHA!" (
-        echo [INFO] Nuova versione rilevata su GitHub. Download ZIP in corso...
-        powershell -Command "try { $url = '%REPO_URL%/archive/refs/heads/main.zip'; Invoke-WebRequest -Uri $url -OutFile 'update.zip'; Expand-Archive -Path 'update.zip' -DestinationPath 'temp_update' -Force; Copy-Item -Path 'temp_update\Iterative-1D-Gasdynamic-Solver-main\*' -Destination '.' -Recurse -Force; Remove-Item 'update.zip'; Remove-Item 'temp_update' -Recurse; exit 0 } catch { exit 1 }"
+        echo [INFO] Nuova versione rilevata su GitHub.
+        set "PS_DL=Invoke-WebRequest -Uri '!REPO_URL!/archive/refs/heads/main.zip' -OutFile 'update.zip'; Expand-Archive -Path 'update.zip' -DestinationPath 'temp_update' -Force; Copy-Item -Path 'temp_update\!REPO_NAME!-main\*' -Destination '.' -Recurse -Force; Remove-Item 'update.zip'; Remove-Item 'temp_update' -Recurse"
+        powershell -NoProfile -Command "!PS_DL!"
         
         if !ERRORLEVEL! EQU 0 (
             echo !REMOTE_SHA! > .last_commit
-            echo [INFO] Aggiornamento completato con successo.
+            echo [INFO] Aggiornamento ZIP completato.
             set NEEDS_FULL_REBUILD=1
-        ) else (
-            echo [ATTENZIONE] Errore durante il download dello ZIP.
         )
     ) else (
         echo [INFO] Codice gia' aggiornato (SMART ZIP).
@@ -76,19 +78,17 @@ if "!NEEDS_FULL_REBUILD!"=="1" (
 ) else (
     python -m pip install -r requirements.txt
 )
-if %ERRORLEVEL% NEQ 0 echo [!] Nota: Errore minore durante l'installazione Python.
 cd /d "%~dp0"
 
 :: --- SEZIONE FRONTEND ---
 echo [3/5] Gestione moduli Node.js...
 cd /d "%~dp0frontend"
-
 set FRONTEND_BROKEN=0
 if not exist node_modules\.bin\vite set FRONTEND_BROKEN=1
 if "!NEEDS_FULL_REBUILD!"=="1" set FRONTEND_BROKEN=1
 
 if "!FRONTEND_BROKEN!"=="1" (
-    echo [INFO] Installazione/Ripristino moduli frontend...
+    echo [INFO] Ripristino moduli...
     if exist node_modules rd /s /q node_modules
     call npm install
 ) else (
@@ -98,7 +98,6 @@ if "!FRONTEND_BROKEN!"=="1" (
         call npm install
     )
 )
-if %ERRORLEVEL% NEQ 0 echo [!] Nota: Errore durante l'installazione Node.js.
 cd /d "%~dp0"
 
 echo.
@@ -113,16 +112,13 @@ start /b cmd /c "cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8000
 start /b cmd /c "cd frontend && npm run dev"
 
 :: --- ATTESA E BROWSER ---
-echo [5/5] In attesa che i server siano pronti...
+echo [5/5] In attesa (8s)...
 timeout /t 8 /nobreak >nul
-
-echo Apertura del simulatore...
 start http://localhost:5173
 
 echo.
 echo ===================================================
 echo     SYSTEM READY! 
-echo     Mantieni questa finestra aperta durante l'uso.
 echo ===================================================
 echo.
 pause
