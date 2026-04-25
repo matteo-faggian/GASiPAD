@@ -23,9 +23,9 @@ if %BEHIND_COUNT% GTR 0 (
     echo [INFO] Rilevato aggiornamento (%BEHIND_COUNT% nuovi commit).
     echo [INFO] Esecuzione "FORCE CLEAN UPDATE": sincronizzazione completa...
     
-    :: Forza il reset alla versione di GitHub
+    rem Forza il reset alla versione di GitHub
     git reset --hard origin/main
-    :: Rimuove file non tracciati (pulisce il workspace)
+    rem Rimuove file non tracciati (pulisce il workspace)
     git clean -fd
     
     set NEEDS_FULL_REBUILD=1
@@ -53,7 +53,7 @@ cd /d "%~dp0"
 if %NEEDS_FULL_REBUILD% EQU 1 (
     echo [3/5] REINSTALLAZIONE moduli Node.js (Clean Install)...
     cd /d "%~dp0frontend"
-    :: Rimuoviamo node_modules per una pulizia totale come richiesto
+    rem Rimuoviamo node_modules per una pulizia totale come richiesto
     if exist node_modules (
         echo [INFO] Eliminazione vecchi moduli frontend...
         rd /s /q node_modules
