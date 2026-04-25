@@ -1,8 +1,9 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-:: GASFLASH PRO (beta version) - Universal Smart Launcher V2
+:: GASFLASH PRO (beta) - Universal Smart Launcher V2.1
 :: Numerical Core: Numba-Accelerated Roe/MUSCL
+title GASFLASH PRO Launcher
 
 echo ===================================================
 echo     GASFLASH PRO: ADVANCED INSTALLATION
@@ -10,130 +11,124 @@ echo     Numerical Core: Numba-Accelerated Roe/MUSCL
 echo ===================================================
 echo.
 
-:: --- CHIUSURA PROCESSI PENDENTI ---
-echo [0/5] Pulizia processi in background...
-taskkill /F /IM node.exe >nul 2>&1
-taskkill /F /IM python.exe >nul 2>&1
+:: --- PREREQUISITI ---
+where python >nul 2>&1 || ( echo [ERRORE] Python non trovato nel PATH. & pause & exit /b 1 )
+where npm    >nul 2>&1 || ( echo [ERRORE] Node.js/npm non trovato nel PATH. & pause & exit /b 1 )
 
 :: --- CONFIGURAZIONE ---
 set "REPO_NAME=Iterative-1D-Gasdynamic-Solver"
 set "REPO_URL=https://github.com/Matteobeo/%REPO_NAME%"
 set "API_URL=https://api.github.com/repos/Matteobeo/%REPO_NAME%/commits/main"
 set "NEEDS_FULL_REBUILD=0"
+set "ROOT=%~dp0"
 
-:: --- CONTROLLO AGGIORNAMENTI ---
 echo [1/5] Verifica aggiornamenti sistema...
 
 git --version >nul 2>&1
-if %ERRORLEVEL% EQU 0 goto GIT_MODE
-goto ZIP_MODE
+if !ERRORLEVEL! EQU 0 ( goto GIT_MODE ) else ( goto ZIP_MODE )
 
 :GIT_MODE
 echo [INFO] Modalita' Git rilevata.
-git fetch origin >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [INFO] Server GitHub non raggiungibile. Avvio in modalita' locale.
-    goto SETUP_BACKEND
-)
+git -C "%ROOT%." fetch origin >nul 2>&1
+if !ERRORLEVEL! NEQ 0 ( echo [INFO] GitHub non raggiungibile. & goto SETUP_BACKEND )
 
-for /f "tokens=*" %%i in ('git rev-list HEAD..origin/main --count 2^>nul') do set BEHIND_COUNT=%%i
-if "!BEHIND_COUNT!"=="" set BEHIND_COUNT=0
+for /f "tokens=*" %%i in ('git -C "%ROOT%." rev-list HEAD..origin/main --count 2^>nul') do set "BEHIND_COUNT=%%i"
+if not defined BEHIND_COUNT set "BEHIND_COUNT=0"
 
 if !BEHIND_COUNT! GTR 0 (
-    echo [INFO] Scaricamento aggiornamenti (!BEHIND_COUNT! commit)...
-    git reset --hard origin/main >nul 2>&1
-    git clean -fd >nul 2>&1
-    set NEEDS_FULL_REBUILD=1
+    echo [INFO] Aggiornamento Git rilevato (!BEHIND_COUNT! commit).
+    git -C "%ROOT%." reset --hard origin/main >nul 2>&1
+    git -C "%ROOT%." clean -fd >nul 2>&1
+    set "NEEDS_FULL_REBUILD=1"
 ) else (
-    echo [INFO] Sistema aggiornato.
+    echo [INFO] Sistema aggiornato (Git).
 )
 goto SETUP_BACKEND
 
 :ZIP_MODE
-echo [INFO] Modalita' ZIP (Smart Update)...
+echo [INFO] Modalita' ZIP (Smart Update).
+set "LOCAL_SHA=none"
+if exist "%ROOT%.last_commit" set /p LOCAL_SHA=<"%ROOT%.last_commit"
 
-set LOCAL_SHA=none
-if exist .last_commit set /p LOCAL_SHA=<.last_commit
+for /f "usebackq tokens=* delims=" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "(Invoke-RestMethod -Uri '%API_URL%').sha.Trim()" 2^>nul`) do set "REMOTE_SHA=%%a"
 
-:: Recupero SHA remoto via PowerShell
-set "GET_SHA_CMD=(Invoke-RestMethod -Uri '%API_URL%').sha"
-for /f "usebackq tokens=*" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "%GET_SHA_CMD%" 2^>nul`) do set REMOTE_SHA=%%a
+if not defined REMOTE_SHA ( echo [INFO] Verifica online fallita (offline). & goto SETUP_BACKEND )
 
-if "!REMOTE_SHA!"=="" (
-    echo [INFO] Impossibile verificare aggiornamenti online.
-    goto SETUP_BACKEND
-)
+if /I "!REMOTE_SHA!"=="!LOCAL_SHA!" ( echo [INFO] Sistema gia' aggiornato. & goto SETUP_BACKEND )
 
-if "!REMOTE_SHA!"=="!LOCAL_SHA!" (
-    echo [INFO] Sistema gia' aggiornato all'ultima versione.
-    goto SETUP_BACKEND
-)
-
-echo [INFO] Nuova versione disponibile. Download in corso...
-set "DL_CMD=Invoke-WebRequest -Uri '%REPO_URL%/archive/refs/heads/main.zip' -OutFile 'update.zip'; Expand-Archive -Path 'update.zip' -DestinationPath 'temp_update' -Force; Copy-Item -Path 'temp_update\%REPO_NAME%-main\*' -Destination '.' -Recurse -Force; Remove-Item 'update.zip'; Remove-Item 'temp_update' -Recurse"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "!DL_CMD!"
+echo [INFO] Nuova versione rilevata su GitHub. Download in corso...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Invoke-WebRequest -Uri '%REPO_URL%/archive/refs/heads/main.zip' -OutFile 'update.zip';" ^
+  "Expand-Archive -Path 'update.zip' -DestinationPath 'temp_update' -Force;" ^
+  "Copy-Item -Path 'temp_update\%REPO_NAME%-main\*' -Destination '.' -Recurse -Force;" ^
+  "Remove-Item 'update.zip';" ^
+  "Remove-Item 'temp_update' -Recurse -Force"
 
 if !ERRORLEVEL! EQU 0 (
-    echo !REMOTE_SHA! > .last_commit
+    >"%ROOT%.last_commit" echo !REMOTE_SHA!
     echo [INFO] Aggiornamento completato con successo.
-    set NEEDS_FULL_REBUILD=1
+    set "NEEDS_FULL_REBUILD=1"
 ) else (
-    echo [ERRORE] Aggiornamento fallito. Controlla la connessione.
+    echo [ERRORE] Aggiornamento fallito.
     pause
+    exit /b 1
 )
-goto SETUP_BACKEND
 
 :SETUP_BACKEND
-:: --- SEZIONE BACKEND ---
 echo [2/5] Configurazione ambiente Python...
-cd /d "%~dp0backend"
+pushd "%ROOT%backend"
 if "!NEEDS_FULL_REBUILD!"=="1" (
-    echo [INFO] Aggiornamento forzato dei pacchetti backend...
-    python -m pip install --upgrade --force-reinstall -r requirements.txt
+    python -m pip install --upgrade -r requirements.txt
 ) else (
     python -m pip install -r requirements.txt
 )
-cd /d "%~dp0"
+popd
 
-:: --- SEZIONE FRONTEND ---
 echo [3/5] Configurazione ambiente Interfaccia...
-cd /d "%~dp0frontend"
-set FRONTEND_BROKEN=0
-if not exist node_modules\.bin\vite set FRONTEND_BROKEN=1
-if "!NEEDS_FULL_REBUILD!"=="1" set FRONTEND_BROKEN=1
+pushd "%ROOT%frontend"
+set "FRONTEND_BROKEN=0"
+if not exist "node_modules\.bin\vite.cmd" set "FRONTEND_BROKEN=1"
+if "!NEEDS_FULL_REBUILD!"=="1" set "FRONTEND_BROKEN=1"
 
 if "!FRONTEND_BROKEN!"=="1" (
-    echo [INFO] Ricostruzione moduli interfaccia (attendere)...
+    echo [INFO] Ricostruzione moduli interfaccia...
     if exist node_modules rd /s /q node_modules
     call npm install
 ) else (
-    if exist package-lock.json (
-        call npm ci
-    ) else (
-        call npm install
-    )
+    if exist package-lock.json ( call npm ci ) else ( call npm install )
 )
-cd /d "%~dp0"
+popd
 
 echo.
 echo ===================================================
 echo     AVVIO GASDYNAMICS SIMULATOR
 echo ===================================================
-echo.
+echo [4/5] Avvio backend e frontend in finestre separate...
 
-:: --- AVVIO SERVER ---
-echo [4/5] Lancio motori di calcolo e interfaccia...
-start /b cmd /c "cd /d "%~dp0backend" && uvicorn app.main:app --host 127.0.0.1 --port 8000"
-start /b cmd /c "cd /d "%~dp0frontend" && npm run dev"
+:: --- CHIUSURA PROCESSI PENDENTI ---
+taskkill /F /IM node.exe >nul 2>&1
+taskkill /F /IM python.exe >nul 2>&1
 
-:: --- ATTESA E BROWSER ---
-echo [5/5] Finalizzazione avvio (8 secondi)...
-timeout /t 8 /nobreak >nul
-start http://localhost:5173
+start "GASFLASH Backend"  cmd /k "cd /d ""%ROOT%backend"" && uvicorn app.main:app --host 127.0.0.1 --port 8000"
+start "GASFLASH Frontend" cmd /k "cd /d ""%ROOT%frontend"" && npm run dev"
+
+echo [5/5] Attesa sincronizzazione server...
+set "TRIES=0"
+:WAIT_LOOP
+set /a TRIES+=1
+powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 1) | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+if !ERRORLEVEL! EQU 0 goto OPEN_BROWSER
+if !TRIES! GEQ 30 ( echo [WARN] Timeout attesa, provo ad aprire il browser... & goto OPEN_BROWSER )
+timeout /t 1 /nobreak >nul
+goto WAIT_LOOP
+
+:OPEN_BROWSER
+start "" http://localhost:5173
 
 echo.
 echo ===================================================
-echo     PRONTO! (Mantieni questa finestra aperta)
+echo     PRONTO. Mantieni aperte le altre finestre.
+echo     Chiudi questa finestra principale per terminare.
 echo ===================================================
-echo.
 pause
+endlocal
