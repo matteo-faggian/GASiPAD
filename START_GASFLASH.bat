@@ -10,6 +10,11 @@ echo     Numerical Core: Numba-Accelerated Roe/MUSCL
 echo ===================================================
 echo.
 
+:: --- CHIUSURA PROCESSI PENDENTI ---
+echo [0/5] Pulizia processi in background...
+taskkill /F /IM node.exe >nul 2>&1
+taskkill /F /IM python.exe >nul 2>&1
+
 :: --- CONFIGURAZIONE ---
 set "REPO_NAME=Iterative-1D-Gasdynamic-Solver"
 set "REPO_URL=https://github.com/Matteobeo/%REPO_NAME%"
