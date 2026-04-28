@@ -56,22 +56,35 @@ def cfd_core_loop(U, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D, dx,
     U_curr = U.copy()
     U_new = U.copy()
     
+    rho = np.zeros(nx)
+    u = np.zeros(nx)
+    p = np.zeros(nx)
+    a = np.zeros(nx)
+    F_int = np.zeros((3, nx + 1))
+    
     for it in range(max_iter):
-        rho = U_curr[0, :] / A
-        u = U_curr[1, :] / U_curr[0, :]
-        p = (gamma - 1) * (U_curr[2, :] / A - 0.5 * rho * u**2)
-        
-        # Protezione valori fisici
-        for i in range(nx):
-            if rho[i] < 1e-6: rho[i] = 1e-6
-            if p[i] < 1e-5: p[i] = 1e-5
+        for i in prange(nx):
+            rho[i] = U_curr[0, i] / A[i]
+            if rho[i] < 1e-6:
+                rho[i] = 1e-6
+                U_curr[0, i] = rho[i] * A[i]
             
-        a = np.sqrt(gamma * p / rho)
-        F_int = np.zeros((3, nx + 1))
+            u[i] = U_curr[1, i] / U_curr[0, i]
+            
+            p[i] = (gamma - 1) * (U_curr[2, i] / A[i] - 0.5 * rho[i] * u[i]**2)
+            if p[i] < 1e-5:
+                p[i] = 1e-5
+                U_curr[2, i] = (p[i] / (gamma - 1) + 0.5 * rho[i] * u[i]**2) * A[i]
+                
+            a[i] = np.sqrt(gamma * p[i] / rho[i])
         
         # BC Inlet
-        u_in = max(u[0], 0.01)
-        tau_in = 1 + 0.5 * (gamma - 1) * (u_in / a[0])**2
+        u_in = max(u[0], 1e-6)
+        Cp = gamma * R / (gamma - 1.0)
+        T_in = T0_in - 0.5 * u_in**2 / Cp
+        if T_in < 1.0: 
+            T_in = 1.0
+        tau_in = T0_in / T_in
         rho_in = P0_in / (R * T0_in) * (tau_in)**(-1.0/(gamma-1.0))
         p_in = P0_in * (tau_in)**(-gamma/(gamma-1.0))
         F_int[:, 0] = roe_flux_numba_fixed(rho_in, u_in, p_in, rho[0], u[0], p[0], A_int[0], gamma)
@@ -132,9 +145,12 @@ class GeneralSolver1D:
 
         curr_x = 0.0
         for comp in components:
+            if comp.type == "normal_shock":
+                continue
             L = max(comp.params.get("length", 1.0), 1e-5)
-            mask_c = (x >= curr_x) & (x <= curr_x + L)
-            mask_i = (x_int >= curr_x) & (x_int <= curr_x + L)
+            eps = dx * 1e-3
+            mask_c = (x >= curr_x - eps) & (x <= curr_x + L + eps)
+            mask_i = (x_int >= curr_x - eps) & (x_int <= curr_x + L + eps)
             if comp.type in ["convergent", "divergent"]:
                 d_in, d_out = comp.params["d_in"], comp.params["d_out"]
                 A[mask_c] = np.pi/4 * (d_in + (d_out-d_in)*(x[mask_c]-curr_x)/L)**2
@@ -155,9 +171,10 @@ class GeneralSolver1D:
 
         U = np.zeros((3, self.nx))
         rho_init = P0_in / (self.R * T0_in)
+        u_init = 10.0
         U[0, :] = rho_init * A
-        U[1, :] = rho_init * 10.0 * A 
-        U[2, :] = (P0_in / (self.gamma - 1)) * A
+        U[1, :] = rho_init * u_init * A 
+        U[2, :] = (P0_in / (self.gamma - 1) + 0.5 * rho_init * u_init**2) * A
 
         U_final = cfd_core_loop(U, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D, dx, self.nx, self.gamma, self.R, max_iter, tol, P0_in, T0_in, P_amb)
 
