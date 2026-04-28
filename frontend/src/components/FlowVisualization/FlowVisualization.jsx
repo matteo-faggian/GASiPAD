@@ -293,6 +293,40 @@ export function FlowVisualization({ components, results }) {
       drawWall(false);
       drawWall(true);
 
+      // 5. Draw Component Divisions and Labels
+      let currentDivX = 0;
+      ctx.setLineDash([4, 4]);
+      components.forEach((comp, idx) => {
+        const L = comp.params.length || 0;
+        
+        if (L > 0) {
+          const startX = currentDivX;
+          const midX = currentDivX + L / 2;
+          
+          const pxStart = marginX + (startX / totalL) * drawW;
+          const pxMid = marginX + (midX / totalL) * drawW;
+          
+          // Draw dividing line at the start of component (skip first)
+          if (idx > 0) {
+            ctx.beginPath();
+            ctx.moveTo(pxStart, marginY / 2);
+            ctx.lineTo(pxStart, h - marginY / 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+
+          // Draw label
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.font = '600 9px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(comp.type.toUpperCase().replace('_', ' '), pxMid, marginY - 10);
+        }
+        
+        currentDivX += L;
+      });
+      ctx.setLineDash([]);
+
       animationFrameId = requestAnimationFrame(render);
     };
 
