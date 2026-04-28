@@ -93,9 +93,10 @@ export function Sidebar({ config, setConfig, onAddComponent, onSimulate, loading
             <button
               className={`solver-toggle ${config.solver_type === 'analytical' ? 'active' : ''}`}
               onClick={() => handleConfigChange('solver_type', 'analytical')}
-              style={{ flex: 1, padding: '0.5rem', fontSize: '0.75rem' }}
+              style={{ flex: 1, padding: '0.5rem', fontSize: '0.75rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
             >
-              Analytical
+              <span style={{ fontWeight: 600 }}>Analytical</span>
+              <span style={{ fontSize: '0.5rem', opacity: 0.7, marginTop: '2px', fontWeight: 'normal' }}>(ONLY FOR THE SIMPLEST CASE)</span>
             </button>
             <button
               className={`solver-toggle ${config.solver_type === 'general' ? 'active' : ''}`}
