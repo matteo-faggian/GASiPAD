@@ -38,11 +38,11 @@ export function useSimulation() {
         gas
       );
 
-      // 4. Generate high-res plot data
-      const { data, boundaries, labels } = Solver.generatePlotData(formattedComponents, simulation.results, gas);
+      // 4. Generate high-res plot data using the final components (including shocks)
+      const { data, boundaries, labels } = Solver.generatePlotData(simulation.components, simulation.results, gas);
       
-      // 5. Compute summary
-      const summary = Solver.computeSummary(config, formattedComponents, data, gas);
+      // 5. Compute summary using the final components
+      const summary = Solver.computeSummary(config, simulation.components, data, gas);
 
       const finalResponse = {
         success: true,
