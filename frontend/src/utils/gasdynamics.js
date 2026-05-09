@@ -218,6 +218,39 @@ export const Rayleigh = {
 
 
 /**
+ * Normal Shock Relations (from normal_shock.py)
+ */
+export const NormalShock = {
+    machPostShock: (M1, gamma) => {
+        const gm1 = gamma - 1.0;
+        const gp1 = gamma + 1.0;
+        const num = 1.0 + (gm1 / 2.0) * Math.pow(M1, 2);
+        const den = gamma * Math.pow(M1, 2) - (gm1 / 2.0);
+        return Math.sqrt(num / den);
+    },
+    
+    pressureRatio: (M1, gamma) => {
+        return 1.0 + (2.0 * gamma / (gamma + 1.0)) * (Math.pow(M1, 2) - 1.0);
+    },
+    
+    temperatureRatio: (M1, gamma) => {
+        const gp1 = gamma + 1.0;
+        const gm1 = gamma - 1.0;
+        const term1 = (1.0 + (2.0 * gamma / gp1) * (Math.pow(M1, 2) - 1.0));
+        const term2 = (2.0 + gm1 * Math.pow(M1, 2)) / (gp1 * Math.pow(M1, 2));
+        return term1 * term2;
+    },
+    
+    stagnationPressureRatio: (M1, gamma) => {
+        const gp1 = gamma + 1.0;
+        const gm1 = gamma - 1.0;
+        const term1 = Math.pow((gp1 * Math.pow(M1, 2) / 2.0) / (1.0 + gm1 / 2.0 * Math.pow(M1, 2)), gamma / gm1);
+        const term2 = Math.pow((gp1 / (2.0 * gamma * Math.pow(M1, 2) - gm1)), 1.0 / gm1);
+        return term1 * term2;
+    }
+};
+
+/**
  * Main Iterative Solver (Ported from iterative_solver.py)
  */
 export const Solver = {
