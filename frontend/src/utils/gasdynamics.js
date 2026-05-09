@@ -511,6 +511,18 @@ export const Solver = {
         forcing.f = (4.0 * comp.params.f) / comp.params.d_h;
       } else if (comp.type === "rayleigh") {
         forcing.Q = (comp.params.q / L) / (gas.cp * T);
+      } else if (comp.type === "solid_grain") {
+        const rho_b = comp.params.rho_b || 1800;
+        const A_b = comp.params.A_b || 0.01;
+        const a_c = comp.params.a_coeff || 0.02;
+        const n = comp.params.n || 0.5;
+        const T_b = comp.params.T_b || 3000;
+        
+        const mdot_gen_dx = (rho_b * A_b * a_c * Math.pow(Math.max(P, 1e4) / 1e6, n)) / L;
+        forcing.w = mdot_gen_dx / Math.max(mdot, 1e-10);
+        
+        const T0 = T * (1 + (gas.gamma - 1) / 2 * M2);
+        forcing.Q = (mdot_gen_dx / Math.max(mdot, 1e-10)) * (gas.cp * (T_b - T0)) / (gas.cp * T);
       }
       return forcing;
     };
@@ -551,7 +563,12 @@ export const Solver = {
       let M2_init = Math.pow(res.M_in, 2);
       let T_init = res.T0_in * Isentropic.temperatureRatio(res.M_in, gas.gamma);
       let P_init = res.P0_in * Isentropic.pressureRatio(res.M_in, gas.gamma);
-      let A_init = (comp.type === "convergent" || comp.type === "divergent") ? gas.areaFromDiameter(comp.params.d_in) : gas.areaFromDiameter(comp.params.d_h || 0.1);
+      
+      let A_init;
+      if (comp.type === "convergent" || comp.type === "divergent") A_init = gas.areaFromDiameter(comp.params.d_in);
+      else if (comp.type === "fanno" || comp.type === "rayleigh") A_init = gas.areaFromDiameter(comp.params.d_h);
+      else A_init = 0.01; // Fallback
+
       let mdot_init = gas.density(P_init, T_init) * (res.M_in * gas.speedOfSound(T_init)) * A_init;
 
       let y = [M2_init, P_init, T_init, mdot_init];
@@ -588,21 +605,21 @@ export const Solver = {
     return { data, boundaries, labels };
   },
 
-  computeSummary: (config, components, data) => {
+  computeSummary: (config, components, data, gas) => {
     const lastIdx = data.x.length - 1;
     const P_e = data.pressure[lastIdx];
     const T_e = data.temperature[lastIdx];
     const M_e = data.mach[lastIdx];
     const mdot = data.mass_flow[lastIdx];
     
-    const a_e = Math.sqrt(config.gamma * config.R * Math.max(0, T_e));
+    const a_e = Math.sqrt(gas.gamma * gas.R * Math.max(0, T_e));
     const V_e = M_e * a_e;
     
     // Find exit area
     let A_e = 1.0;
     const lastComp = components[components.length - 1];
-    if (lastComp.type === "convergent" || lastComp.type === "divergent") A_e = (new GasProperties()).areaFromDiameter(lastComp.params.d_out);
-    else if (lastComp.type === "fanno" || lastComp.type === "rayleigh") A_e = (new GasProperties()).areaFromDiameter(lastComp.params.d_h);
+    if (lastComp.type === "convergent" || lastComp.type === "divergent") A_e = gas.areaFromDiameter(lastComp.params.d_out);
+    else if (lastComp.type === "fanno" || lastComp.type === "rayleigh") A_e = gas.areaFromDiameter(lastComp.params.d_h);
 
     const thrust = mdot * V_e + (P_e - config.P_amb) * A_e;
 
@@ -614,5 +631,6 @@ export const Solver = {
     };
   }
 };
+
 
 

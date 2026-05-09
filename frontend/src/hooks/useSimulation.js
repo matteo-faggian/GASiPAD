@@ -35,7 +35,7 @@ export function useSimulation() {
       const { data, boundaries, labels } = Solver.generatePlotData(formattedComponents, simulation.results, gas);
       
       // 5. Compute summary
-      const summary = Solver.computeSummary(config, formattedComponents, data);
+      const summary = Solver.computeSummary(config, formattedComponents, data, gas);
 
       const finalResponse = {
         success: true,
