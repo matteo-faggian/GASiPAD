@@ -10,24 +10,31 @@ export function useSimulation() {
     setLoading(true);
     setError(null);
     
+    // Funzione helper per pulire e parsare i numeri (gestisce virgole e punti)
+    const p = (val) => {
+      if (typeof val === 'number') return val;
+      const cleaned = String(val).replace(',', '.').trim();
+      return parseFloat(cleaned) || 0;
+    };
+
     try {
       // 1. Prepare Gas Properties
-      const gas = new GasProperties(parseFloat(config.gamma), parseFloat(config.R));
+      const gas = new GasProperties(p(config.gamma), p(config.R));
       
       // 2. Format components for the solver
       const formattedComponents = components.map(c => ({
         type: c.type,
         params: Object.fromEntries(
-          Object.entries(c.params).map(([k, v]) => [k, parseFloat(v)])
+          Object.entries(c.params).map(([k, v]) => [k, p(v)])
         )
       }));
 
       // 3. Run the Local Solver (Client-side)
       const simulation = Solver.solveFullPipeline(
         formattedComponents,
-        parseFloat(config.P0),
-        parseFloat(config.T0),
-        parseFloat(config.P_amb),
+        p(config.P0),
+        p(config.T0),
+        p(config.P_amb),
         gas
       );
 

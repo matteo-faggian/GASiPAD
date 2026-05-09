@@ -59,29 +59,23 @@ export const Isentropic = {
     return (1.0 / M) * Math.pow(term, exponent);
   },
 
-  // Numerical solver for Mach from Area Ratio (Brent's method equivalent)
+  // Numerical solver for Mach from Area Ratio
   machFromAreaRatio: (A_ratio, gamma, subsonic = true) => {
-    if (A_ratio < 1.0 - 1e-9) throw new Error(`Area ratio A/A* must be >= 1.0, got ${A_ratio}`);
-    if (Math.abs(A_ratio - 1.0) < 1e-9) return 1.0;
+    const AR = Math.max(1.0, A_ratio);
+    if (Math.abs(AR - 1.0) < 1e-10) return 1.0;
 
-    const f = (M) => Isentropic.areaMachRatio(M, gamma) - A_ratio;
+    const f = (M) => Isentropic.areaMachRatio(M, gamma) - AR;
     
-    // Simple Bisection for porting (stable and precise)
-    let low = subsonic ? 1e-12 : 1.0 + 1e-10;
-    let high = subsonic ? 1.0 - 1e-10 : 25.0; // 25 is safe upper bound for most M
+    let low = subsonic ? 1e-12 : 1.0;
+    let high = subsonic ? 1.0 : 40.0; 
     
-    if (!subsonic) {
-        while (f(high) < 0 && high < 100) high *= 2;
-    }
-
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 80; i++) {
       let mid = (low + high) / 2;
       if (f(mid) > 0) {
         subsonic ? (low = mid) : (high = mid);
       } else {
         subsonic ? (high = mid) : (low = mid);
       }
-      if (Math.abs(high - low) < 1e-12) return mid;
     }
     return (low + high) / 2;
   },
