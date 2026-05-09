@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { GasProperties, Solver } from '../utils/gasdynamics';
 
 export function useSimulation() {
   const [results, setResults] = useState(null);
@@ -8,39 +9,47 @@ export function useSimulation() {
   const simulate = async (config, components) => {
     setLoading(true);
     setError(null);
-    setResults(null);
     
     try {
-      const payload = {
-        P0: parseFloat(config.P0),
-        T0: parseFloat(config.T0),
-        P_amb: parseFloat(config.P_amb),
-        gamma: parseFloat(config.gamma),
-        R: parseFloat(config.R),
-        components: components.map(c => ({
-          type: c.type,
-          params: Object.fromEntries(
-            Object.entries(c.params).map(([k, v]) => [k, parseFloat(v)])
-          )
-        })),
-        solver_type: config.solver_type || "analytical"
+      // 1. Prepare Gas Properties
+      const gas = new GasProperties(parseFloat(config.gamma), parseFloat(config.R));
+      
+      // 2. Format components for the solver
+      const formattedComponents = components.map(c => ({
+        type: c.type,
+        params: Object.fromEntries(
+          Object.entries(c.params).map(([k, v]) => [k, parseFloat(v)])
+        )
+      }));
+
+      // 3. Run the Local Solver (Client-side)
+      const simulation = Solver.solveFullPipeline(
+        formattedComponents,
+        parseFloat(config.P0),
+        parseFloat(config.T0),
+        parseFloat(config.P_amb),
+        gas
+      );
+
+      // 4. Generate high-res plot data
+      const { data, boundaries, labels } = Solver.generatePlotData(formattedComponents, simulation.results, gas);
+      
+      // 5. Compute summary
+      const summary = Solver.computeSummary(config, formattedComponents, data);
+
+      const finalResponse = {
+        success: true,
+        data: data,
+        component_boundaries: boundaries,
+        component_labels: labels,
+        summary: summary,
+        warnings: simulation.warnings
       };
 
-      const res = await fetch('http://localhost:8000/api/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Simulation failed");
-      }
-      
-      setResults(data);
+      setResults(finalResponse);
       
     } catch (err) {
+      console.error(err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -49,3 +58,4 @@ export function useSimulation() {
 
   return { simulate, results, loading, error, clearResults: () => setResults(null) };
 }
+
