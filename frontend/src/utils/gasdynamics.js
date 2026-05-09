@@ -461,7 +461,7 @@ export const Solver = {
     return newComps;
   },
 
-  generatePlotData: (components, results, gas, numPoints = 50) => {
+  generatePlotData: (components, results, gas, numPoints = 200) => {
     const data = {
       x: [], mach: [], pressure: [], pressure_total: [],
       temperature: [], temperature_total: [], mass_flow: []
@@ -470,58 +470,118 @@ export const Solver = {
     const labels = [];
     let currentX = 0;
 
+    // Influence Coefficients (from influence_solver.py)
+    const getCoeffs = (M2, k) => {
+      let denom = 1.0 - M2;
+      if (Math.abs(denom) < 1e-8) denom = 1e-8 * Math.sign(denom);
+      return {
+        M: {
+          A: -(2 * (1 + (k - 1) / 2 * M2)) / denom,
+          Q: (1 + k * M2) / denom,
+          f: (k * M2 * (1 + (k - 1) / 2 * M2)) / denom,
+          w: (2 * (1 + k * M2) * (1 + (k - 1) / 2 * M2)) / denom
+        },
+        P: {
+          A: (k * M2) / denom,
+          Q: -k * M2 / denom,
+          f: -(k * M2 * (1 + (k - 1) * M2)) / (2 * denom),
+          w: -(2 * k * M2 * (1 + (k - 1) / 2 * M2)) / denom
+        },
+        T: {
+          A: ((k - 1) * M2) / denom,
+          Q: (1 - k * M2) / denom,
+          f: -(k * (k - 1) * Math.pow(M2, 2)) / (2 * denom),
+          w: -((k - 1) * M2 * (1 + k * M2)) / denom
+        }
+      };
+    };
+
+    const getForcings = (x_loc, comp, y, gas) => {
+      const [M2, P, T, mdot] = y;
+      const L = Math.max(comp.params.length || 1.0, 1e-6);
+      const forcing = { A: 0, Q: 0, f: 0, w: 0 };
+
+      if (comp.type === "convergent" || comp.type === "divergent") {
+        const d_in = comp.params.d_in;
+        const d_out = comp.params.d_out;
+        const d_x = d_in + (d_out - d_in) * (x_loc / L);
+        const dd_dx = (d_out - d_in) / L;
+        forcing.A = (2.0 / d_x) * dd_dx;
+      } else if (comp.type === "fanno") {
+        forcing.f = (4.0 * comp.params.f) / comp.params.d_h;
+      } else if (comp.type === "rayleigh") {
+        forcing.Q = (comp.params.q / L) / (gas.cp * T);
+      }
+      return forcing;
+    };
+
+    const deriv = (x_loc, y, comp, gas) => {
+      const [M2, P, T, mdot] = y;
+      const coeffs = getCoeffs(M2, gas.gamma);
+      const f = getForcings(x_loc, comp, y, gas);
+
+      const dm2_dx = M2 * (coeffs.M.A * f.A + coeffs.M.Q * f.Q + coeffs.M.f * f.f + coeffs.M.w * f.w);
+      const dp_dx = P * (coeffs.P.A * f.A + coeffs.P.Q * f.Q + coeffs.P.f * f.f + coeffs.P.w * f.w);
+      const dt_dx = T * (coeffs.T.A * f.A + coeffs.T.Q * f.Q + coeffs.T.f * f.f + coeffs.T.w * f.w);
+      const dmdot_dx = mdot * f.w;
+
+      return [dm2_dx, dp_dx, dt_dx, dmdot_dx];
+    };
+
     for (let i = 0; i < components.length; i++) {
       const comp = components[i];
       const res = results[i];
       const L = comp.params.length || 0;
       labels.push(comp.type.toUpperCase());
 
-      const x_vals = Array.from({ length: numPoints }, (_, idx) => currentX + (L * idx) / (numPoints - 1));
-
-      for (const x of x_vals) {
-        const dx = x - currentX;
-        let M, P0, T0, A_x;
-
-        if (dx === 0) {
-          M = res.M_in; P0 = res.P0_in; T0 = res.T0_in; A_x = res.A_in;
-        } else if (dx === L && L > 0) {
-          M = res.M_out; P0 = res.P0_out; T0 = res.T0_out; A_x = res.A_out;
-        } else {
-          // Linear interpolation for intermediate points in simple ducts
-          const frac = dx / L;
-          if (comp.type === "fanno") {
-            const f_res = Solver.evaluateComponent({ type: "fanno", params: { ...comp.params, length: dx } }, res.M_in, res.P0_in, res.T0_in, gas);
-            M = f_res.M_out; P0 = f_res.P0_out; T0 = f_res.T0_out;
-          } else if (comp.type === "rayleigh") {
-            const r_res = Solver.evaluateComponent({ type: "rayleigh", params: { ...comp.params, q: comp.params.q * frac } }, res.M_in, res.P0_in, res.T0_in, gas);
-            M = r_res.M_out; P0 = r_res.P0_out; T0 = r_res.T0_out;
-          } else if (comp.type === "convergent" || comp.type === "divergent") {
-            const d_x = comp.params.d_in + (comp.params.d_out - comp.params.d_in) * frac;
-            A_x = gas.areaFromDiameter(d_x);
-            const A_in = gas.areaFromDiameter(comp.params.d_in);
-            const A_star = A_in / Isentropic.areaMachRatio(res.M_in, gas.gamma);
-            const A_ratio = A_x / A_star;
-            const subsonic = !(M > 1.0 || (comp.type === "divergent" && res.M_out > 1.0));
-            M = Isentropic.machFromAreaRatio(Math.max(A_ratio, 1.0), gas.gamma, subsonic);
-            P0 = res.P0_in; T0 = res.T0_in;
-          } else {
-            M = res.M_in + (res.M_out - res.M_in) * frac;
-            P0 = res.P0_in + (res.P0_out - res.P0_in) * frac;
-            T0 = res.T0_in + (res.T0_out - res.T0_in) * frac;
-          }
-        }
-
-        const stats = Isentropic.staticFromStagnation(M, P0, T0, gas.gamma, gas.R);
-        data.x.push(x);
-        data.mach.push(M);
-        data.pressure.push(stats.P);
-        data.pressure_total.push(P0);
-        data.temperature.push(stats.T);
-        data.temperature_total.push(T0);
-        
-        const mdot = stats.rho * stats.V * (A_x || 1.0);
-        data.mass_flow.push(mdot);
+      if (L === 0) {
+        // Discontinuity (Shock)
+        data.x.push(currentX);
+        data.mach.push(res.M_out);
+        data.pressure.push(res.P_out);
+        data.pressure_total.push(res.P0_out);
+        data.temperature.push(res.T_out);
+        data.temperature_total.push(res.T0_out);
+        data.mass_flow.push(data.mass_flow[data.mass_flow.length - 1] || 0);
+        boundaries.push(currentX);
+        continue;
       }
+
+      // Initial state for this component
+      let M2_init = Math.pow(res.M_in, 2);
+      let T_init = res.T0_in * Isentropic.temperatureRatio(res.M_in, gas.gamma);
+      let P_init = res.P0_in * Isentropic.pressureRatio(res.M_in, gas.gamma);
+      let A_init = (comp.type === "convergent" || comp.type === "divergent") ? gas.areaFromDiameter(comp.params.d_in) : gas.areaFromDiameter(comp.params.d_h || 0.1);
+      let mdot_init = gas.density(P_init, T_init) * (res.M_in * gas.speedOfSound(T_init)) * A_init;
+
+      let y = [M2_init, P_init, T_init, mdot_init];
+      const stepSize = L / (numPoints - 1);
+
+      for (let j = 0; j < numPoints; j++) {
+        const x_rel = j * stepSize;
+        
+        // Record current state
+        const M_curr = Math.sqrt(Math.max(y[0], 0));
+        const T0_curr = y[2] / Isentropic.temperatureRatio(M_curr, gas.gamma);
+        const P0_curr = y[1] / Isentropic.pressureRatio(M_curr, gas.gamma);
+
+        data.x.push(currentX + x_rel);
+        data.mach.push(M_curr);
+        data.pressure.push(y[1]);
+        data.pressure_total.push(P0_curr);
+        data.temperature.push(y[2]);
+        data.temperature_total.push(T0_curr);
+        data.mass_flow.push(y[3]);
+
+        // RK4 Step
+        const k1 = deriv(x_rel, y, comp, gas);
+        const k2 = deriv(x_rel + stepSize / 2, y.map((v, idx) => v + (stepSize / 2) * k1[idx]), comp, gas);
+        const k3 = deriv(x_rel + stepSize / 2, y.map((v, idx) => v + (stepSize / 2) * k2[idx]), comp, gas);
+        const k4 = deriv(x_rel + stepSize, y.map((v, idx) => v + stepSize * k3[idx]), comp, gas);
+
+        y = y.map((v, idx) => v + (stepSize / 6) * (k1[idx] + 2 * k2[idx] + 2 * k3[idx] + k4[idx]));
+      }
+
       currentX += L;
       boundaries.push(currentX);
     }
