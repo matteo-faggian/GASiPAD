@@ -1,12 +1,11 @@
 /**
- * GASPAD Core Gas Dynamics Solver (JavaScript Port)
- * Ported from backend/app/solver/
+ * GASPAD Core Gas Dynamics Solver (JavaScript Port) - High Fidelity Version
  */
 
 export const PI = Math.PI;
 
 export class GasProperties {
-  constructor(gamma = 1.4, R = 287.0) {
+  constructor(gamma = 1.4, R = 287.05) {
     this.gamma = gamma;
     this.R = R;
     this.cp = (gamma * R) / (gamma - 1);
@@ -18,14 +17,13 @@ export class GasProperties {
 }
 
 export const Isentropic = {
-  temperatureRatio: (M, gamma) => Math.pow(1.0 + ((gamma - 1.0) / 2.0) * Math.pow(M, 2), -1.0),
-  pressureRatio: (M, gamma) => Math.pow(1.0 + ((gamma - 1.0) / 2.0) * Math.pow(M, 2), -gamma / (gamma - 1.0)),
+  temperatureRatio: (M, gamma) => 1.0 / (1.0 + (gamma - 1.0) / 2.0 * M * M),
+  pressureRatio: (M, gamma) => Math.pow(1.0 + (gamma - 1.0) / 2.0 * M * M, -gamma / (gamma - 1.0)),
   areaMachRatio: (M, gamma) => {
-    if (Math.abs(M) < 1e-12) return Infinity;
+    if (M < 1e-12) return Infinity;
     const gp1 = gamma + 1.0;
     const gm1 = gamma - 1.0;
-    const term = (2.0 / gp1) * (1.0 + (gm1 / 2.0) * Math.pow(M, 2));
-    return (1.0 / M) * Math.pow(term, gp1 / (2.0 * gm1));
+    return (1.0 / M) * Math.pow((2.0 / gp1) * (1.0 + (gm1 / 2.0) * M * M), gp1 / (2.0 * gm1));
   },
   machFromAreaRatio: (A_ratio, gamma, subsonic = true) => {
     const AR = Math.max(1.0, A_ratio);
@@ -42,36 +40,29 @@ export const Isentropic = {
 };
 
 export const NormalShock = {
-  machPostShock: (M1, gamma) => {
-    const gm1 = gamma - 1.0;
-    const gp1 = gamma + 1.0;
-    return Math.sqrt((1.0 + (gm1 / 2.0) * Math.pow(M1, 2)) / (gamma * Math.pow(M1, 2) - (gm1 / 2.0)));
-  },
-  pressureRatio: (M1, gamma) => 1.0 + (2.0 * gamma / (gamma + 1.0)) * (Math.pow(M1, 2) - 1.0),
+  machPostShock: (M1, gamma) => Math.sqrt((1.0 + (gamma - 1) / 2 * M1 * M1) / (gamma * M1 * M1 - (gamma - 1) / 2)),
+  pressureRatio: (M1, gamma) => 1.0 + (2.0 * gamma / (gamma + 1.0)) * (M1 * M1 - 1.0),
   stagnationPressureRatio: (M1, gamma) => {
-    const gp1 = gamma + 1.0;
-    const gm1 = gamma - 1.0;
-    const term1 = Math.pow((gp1 * Math.pow(M1, 2) / 2.0) / (1.0 + gm1 / 2.0 * Math.pow(M1, 2)), gamma / gm1);
-    const term2 = Math.pow((gp1 / (2.0 * gamma * Math.pow(M1, 2) - gm1)), 1.0 / gm1);
+    const gp1 = gamma + 1.0; const gm1 = gamma - 1.0;
+    const term1 = Math.pow((gp1 * M1 * M1 / 2.0) / (1.0 + gm1 / 2.0 * M1 * M1), gamma / gm1);
+    const term2 = Math.pow((gp1 / (2.0 * gamma * M1 * M1 - gm1)), 1.0 / gm1);
     return term1 * term2;
   }
 };
 
 export const Fanno = {
   parameter: (M, gamma) => {
-    if (Math.abs(M) < 1e-12) return Infinity;
+    if (M < 1e-12) return Infinity;
     const gp1 = gamma + 1.0;
-    const M2 = Math.pow(M, 2);
-    return (1.0 - M2) / (gamma * M2) + (gp1 / (2.0 * gamma)) * Math.log((gp1 * M2) / (2.0 + (gamma - 1) * M2));
+    return (1.0 - M * M) / (gamma * M * M) + (gp1 / (2.0 * gamma)) * Math.log((gp1 * M * M) / (2.0 + (gamma - 1) * M * M));
   },
-  totalPressureRatio: (M, gamma) => (1.0 / M) * Math.pow((2.0 / (gamma + 1)) * (1.0 + (gamma - 1) / 2 * Math.pow(M, 2)), (gamma + 1) / (2 * (gamma - 1))),
+  totalPressureRatio: (M, gamma) => (1.0 / M) * Math.pow((2.0 / (gamma + 1)) * (1.0 + (gamma - 1) / 2 * M * M), (gamma + 1) / (2 * (gamma - 1))),
   machFromParameter: (fLstar_D, gamma, subsonic = true) => {
     const f = (M) => Fanno.parameter(M, gamma) - fLstar_D;
     let low = subsonic ? 1e-12 : 1.0, high = subsonic ? 1.0 : 40.0;
     for (let i = 0; i < 80; i++) {
       let mid = (low + high) / 2;
-      if (f(mid) > 0) subsonic ? (low = mid) : (high = mid);
-      else subsonic ? (high = mid) : (low = mid);
+      if (f(mid) > 0) subsonic ? (low = mid) : (high = mid); else subsonic ? (high = mid) : (low = mid);
     }
     return (low + high) / 2;
   }
@@ -79,27 +70,25 @@ export const Fanno = {
 
 export const Rayleigh = {
   totalTemperatureRatio: (M, gamma) => {
-    const M2 = Math.pow(M, 2);
+    const M2 = M * M;
     return (2.0 * (gamma + 1) * M2) / Math.pow(1.0 + gamma * M2, 2) * (1.0 + (gamma - 1) / 2 * M2);
   },
-  totalPressureRatio: (M, gamma) => ((gamma + 1) / (1.0 + gamma * Math.pow(M, 2))) * Math.pow((2.0 / (gamma + 1)) * (1.0 + (gamma - 1) / 2 * Math.pow(M, 2)), gamma / (gamma - 1)),
+  totalPressureRatio: (M, gamma) => ((gamma + 1) / (1.0 + gamma * M * M)) * Math.pow((2.0 / (gamma + 1)) * (1.0 + (gamma - 1) / 2 * M * M), gamma / (gamma - 1)),
   machFromT0Ratio: (T0_ratio, gamma, subsonic = true) => {
     const f = (M) => Rayleigh.totalTemperatureRatio(M, gamma) - T0_ratio;
     let low = subsonic ? 1e-12 : 1.0, high = subsonic ? 1.0 : 40.0;
     for (let i = 0; i < 80; i++) {
       let mid = (low + high) / 2;
-      if (f(mid) > 0) subsonic ? (high = mid) : (low = mid); // In Rayleigh, subsonic T0 increases with M
-      else subsonic ? (low = mid) : (high = mid);
+      if (f(mid) > 0) subsonic ? (high = mid) : (low = mid); else subsonic ? (low = mid) : (high = mid);
     }
     return (low + high) / 2;
   }
 };
 
 export const Solver = {
-  evaluateComponent: (comp, M_in, P0_in, T0_in, gas, forceSupersonic = false) => {
+  evaluateComponent: (comp, M_in, P0_in, T0_in, gas, forceSup = false) => {
     const out = { M_in, P0_in, T0_in, type: comp.type };
     const k = gas.gamma;
-
     if (comp.type === "convergent") {
       const A_in = gas.areaFromDiameter(comp.params.d_in);
       const A_out = gas.areaFromDiameter(comp.params.d_out);
@@ -110,7 +99,7 @@ export const Solver = {
       const A_in = gas.areaFromDiameter(comp.params.d_in);
       const A_out = gas.areaFromDiameter(comp.params.d_out);
       const A_star = A_in / Isentropic.areaMachRatio(Math.max(M_in, 1e-12), k);
-      out.M_out = Isentropic.machFromAreaRatio(A_out / A_star, k, !(forceSupersonic || M_in > 1.0));
+      out.M_out = Isentropic.machFromAreaRatio(A_out / A_star, k, !(forceSup || M_in > 1.0));
       out.P0_out = P0_in; out.T0_out = T0_in;
     } else if (comp.type === "fanno") {
       const fLD = (4 * comp.params.f * comp.params.length) / comp.params.d_h;
@@ -145,9 +134,7 @@ export const Solver = {
   },
 
   solveFullPipeline: (components, P0_in, T0_in, P_amb, gas) => {
-    let warnings = [];
-    const k = gas.gamma;
-    // 1. Choked inlet
+    let warnings = [], k = gas.gamma;
     let M_lo = 1e-6, M_hi = 1.0;
     for (let i = 0; i < 40; i++) {
       let mid = (M_lo + M_hi) / 2;
@@ -164,17 +151,13 @@ export const Solver = {
       }
       return { success: true, results: Solver.evaluatePipeline(components, lo, P0_in, T0_in, gas, false), warnings, components };
     }
-    // Choked flow
     warnings.push("Flow is choked.");
     let res_sup;
     try { res_sup = Solver.evaluatePipeline(components, M_choked, P0_in, T0_in, gas, true); }
     catch (e) { return { success: true, results: res_sub, warnings, components }; }
-    
     const last = res_sup[res_sup.length-1];
     const P_shock_exit = last.M_out > 1.0 ? last.P_out * NormalShock.pressureRatio(last.M_out, k) : last.P_out;
     if (P_amb <= P_shock_exit) return { success: true, results: res_sup, warnings, components };
-    
-    // Shock inside
     warnings.push("Normal shock detected inside.");
     let totalL = components.reduce((s, c) => s + (c.params.length || 0), 0);
     const obj_shock = (x) => {
@@ -199,8 +182,7 @@ export const Solver = {
         const dx = x_shock - curX;
         const c1 = { ...comp, params: { ...comp.params, length: dx } };
         if (comp.type === "convergent" || comp.type === "divergent") c1.params.d_out = comp.params.d_in + (comp.params.d_out - comp.params.d_in) * (dx / L);
-        newComps.push(c1);
-        newComps.push({ type: "normal_shock", params: { length: 0 } });
+        newComps.push(c1); newComps.push({ type: "normal_shock", params: { length: 0 } });
         const c2 = { ...comp, params: { ...comp.params, length: L - dx } };
         if (comp.type === "convergent" || comp.type === "divergent") c2.params.d_in = comp.params.d_in + (comp.params.d_out - comp.params.d_in) * (dx / L);
         newComps.push(c2);
@@ -210,41 +192,56 @@ export const Solver = {
     return newComps;
   },
 
-  generatePlotData: (components, results, gas, numPoints = 200) => {
+  generatePlotData: (components, results, gas, numPoints = 150) => {
     const data = { x: [], mach: [], pressure: [], pressure_total: [], temperature: [], temperature_total: [], mass_flow: [] };
-    let currentX = 0, boundaries = [0], labels = [];
-    const k = gas.gamma;
-
+    let curX = 0, boundaries = [0], labels = [], k = gas.gamma;
     for (let i = 0; i < components.length; i++) {
       const comp = components[i], res = results[i], L = comp.params.length || 0;
       labels.push(comp.type.toUpperCase());
       if (L === 0) {
-        data.x.push(currentX); data.mach.push(res.M_out); data.pressure.push(res.P_out);
-        data.pressure_total.push(res.P0_out); data.temperature.push(res.T_out);
-        data.temperature_total.push(res.T0_out); data.mass_flow.push(data.mass_flow[data.mass_flow.length - 1] || 0);
+        data.x.push(curX); data.mach.push(res.M_out); data.pressure.push(res.P_out); data.pressure_total.push(res.P0_out);
+        data.temperature.push(res.T_out); data.temperature_total.push(res.T0_out); data.mass_flow.push(data.mass_flow[data.mass_flow.length-1] || 0);
         continue;
       }
-      let y = [Math.pow(res.M_in, 2), res.P_out / Isentropic.pressureRatio(res.M_out, k) * Isentropic.pressureRatio(res.M_in, k), res.T_out / Isentropic.temperatureRatio(res.M_out, k) * Isentropic.temperatureRatio(res.M_in, k), 1.0];
       const step = L / (numPoints - 1);
       for (let j = 0; j < numPoints; j++) {
-        const x_rel = j * step, M = Math.sqrt(Math.max(1e-12, y[0]));
-        data.x.push(currentX + x_rel); data.mach.push(M);
-        const P = res.P0_in * Isentropic.pressureRatio(M, k); // Simplified for plotting
-        data.pressure.push(P); data.pressure_total.push(res.P0_in);
-        data.temperature.push(res.T0_in * Isentropic.temperatureRatio(M, k));
-        data.temperature_total.push(res.T0_in); data.mass_flow.push(res.M_in); // Dummy for now
+        const x_rel = j * step, frac = x_rel / L;
+        let M, P0 = res.P0_in, T0 = res.T0_in, A_x;
+        if (comp.type === "convergent" || comp.type === "divergent") {
+          const d_x = comp.params.d_in + (comp.params.d_out - comp.params.d_in) * frac;
+          A_x = gas.areaFromDiameter(d_x);
+          const A_in = gas.areaFromDiameter(comp.params.d_in);
+          const A_star = A_in / Isentropic.areaMachRatio(res.M_in, k);
+          M = Isentropic.machFromAreaRatio(A_x / A_star, k, res.M_out <= 1.0);
+        } else {
+          M = res.M_in + (res.M_out - res.M_in) * frac;
+          P0 = res.P0_in + (res.P0_out - res.P0_in) * frac;
+          T0 = res.T0_in + (res.T0_out - res.T0_in) * frac;
+          A_x = gas.areaFromDiameter(comp.params.d_h);
+        }
+        const T = T0 * Isentropic.temperatureRatio(M, k);
+        const P = P0 * Isentropic.pressureRatio(M, k);
+        const rho = gas.density(P, T);
+        const V = M * gas.speedOfSound(T);
+        data.x.push(curX + x_rel); data.mach.push(M); data.pressure.push(P); data.pressure_total.push(P0);
+        data.temperature.push(T); data.temperature_total.push(T0); data.mass_flow.push(rho * V * A_x);
       }
-      currentX += L; boundaries.push(currentX);
+      curX += L; boundaries.push(curX);
     }
     return { data, boundaries, labels };
   },
 
   computeSummary: (config, components, data, gas) => {
-    const last = data.x.length - 1, P_e = data.pressure[last], M_e = data.mach[last], mdot = 1.0;
-    const V_e = M_e * Math.sqrt(gas.gamma * gas.R * data.temperature[last]);
-    let A_e = 0.01;
-    const lc = components[components.length-1];
+    const last = data.x.length - 1, P_e = data.pressure[last], M_e = data.mach[last], T_e = data.temperature[last];
+    const mdot = data.mass_flow[last], V_e = M_e * gas.speedOfSound(T_e);
+    let A_e = 0.01; const lc = components[components.length-1];
     if (lc.type === "convergent" || lc.type === "divergent") A_e = gas.areaFromDiameter(lc.params.d_out);
-    return { "Thrust": { value: mdot * V_e + (P_e - config.P_amb) * A_e, unit: "N" }, "Exit Velocity": { value: V_e, unit: "m/s" } };
+    else if (lc.params.d_h) A_e = gas.areaFromDiameter(lc.params.d_h);
+    return {
+      "Thrust": { value: mdot * V_e + (P_e - config.P_amb) * A_e, unit: "N" },
+      "Mass Flow": { value: mdot, unit: "kg/s" },
+      "Exit Velocity": { value: V_e, unit: "m/s" },
+      "Exit Mach": { value: M_e, unit: "-" }
+    };
   }
 };
