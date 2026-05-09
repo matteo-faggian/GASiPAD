@@ -323,42 +323,142 @@ export const Solver = {
   },
 
   solveFullPipeline: (components, P0_in, T0_in, P_amb, gas) => {
+    let warnings = [];
+    
     if (P_amb >= P0_in - 1e-3) {
-      return { success: true, results: components.map(c => ({ M_in: 0, M_out: 0, P_out: P0_in, T_out: T0_in })), warnings: ["No pressure gradient."] };
+      warnings.push("No pressure gradient.");
+      return { success: true, results: components.map(c => ({ M_in: 0, M_out: 0, P0_in, P0_out: P0_in, T0_in, T0_out: T0_in, P_out: P0_in, T_out: T0_in })), warnings, components };
     }
 
-    // Find choked inlet Mach (bisection)
+    // 1. Find choked inlet Mach (bisection)
     let M_lo = 1e-6, M_hi = 1.0;
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 60; i++) {
       let mid = (M_lo + M_hi) / 2;
       try { Solver.evaluatePipeline(components, mid, P0_in, T0_in, gas); M_lo = mid; } 
       catch (e) { M_hi = mid; }
     }
     const M_in_choked = M_lo;
 
-    // Shooting Method for Subsonic
-    const obj = (M) => {
-      try {
-        const res = Solver.evaluatePipeline(components, M, P0_in, T0_in, gas, false);
-        return res[res.length - 1].P_out - P_amb;
-      } catch (e) { return -1; }
-    };
+    // 2. Evaluate at choked M_in (fully subsonic)
+    const res_choked_sub = Solver.evaluatePipeline(components, M_in_choked, P0_in, T0_in, gas, false);
+    const P_exit_choked_sub = res_choked_sub[res_choked_sub.length - 1].P_out;
 
-    const res_max_sub = Solver.evaluatePipeline(components, M_in_choked, P0_in, T0_in, gas, false);
-    const P_exit_max_sub = res_max_sub[res_max_sub.length - 1].P_out;
-
-    if (P_amb >= P_exit_max_sub) {
+    // CASE A: FULLY SUBSONIC
+    if (P_amb >= P_exit_choked_sub - 1e-3) {
+      const obj_sub = (M) => {
+        try {
+          const res = Solver.evaluatePipeline(components, M, P0_in, T0_in, gas, false);
+          return res[res.length - 1].P_out - P_amb;
+        } catch (e) { return -1; }
+      };
+      
       let low = 1e-8, high = M_in_choked;
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < 60; i++) {
         let mid = (low + high) / 2;
-        if (obj(mid) > 0) low = mid; else high = mid;
+        if (obj_sub(mid) > 0) low = mid; else high = mid;
       }
-      return { success: true, results: Solver.evaluatePipeline(components, low, P0_in, T0_in, gas, false), warnings: [] };
+      return { success: true, results: Solver.evaluatePipeline(components, low, P0_in, T0_in, gas, false), warnings: [], components };
     }
 
-    // Choked Flow Logic (Basic implementation for iPad)
-    // In a real scenario, we'd add the shock placement here too.
-    return { success: true, results: res_max_sub, warnings: ["Flow is choked."] };
+    // CASE B: CHOKED FLOW
+    warnings.push("Flow is choked.");
+
+    // B1: Try fully supersonic branch
+    let res_choked_sup;
+    try {
+      res_choked_sup = Solver.evaluatePipeline(components, M_in_choked, P0_in, T0_in, gas, true);
+    } catch (e) {
+      // Supersonic branch chokes thermally or due to friction
+      warnings.push("Complex choking detected. Falling back to subsonic branch.");
+      return { success: true, results: res_choked_sub, warnings, components };
+    }
+
+    const M_exit_sup = res_choked_sup[res_choked_sup.length - 1].M_out;
+    const P_exit_sup = res_choked_sup[res_choked_sup.length - 1].P_out;
+    const P_normal_shock_exit = M_exit_sup > 1.0 ? P_exit_sup * NormalShock.pressureRatio(M_exit_sup, gas.gamma) : P_exit_sup;
+
+    // Underexpanded / Overexpanded (Oblique)
+    if (P_amb <= P_normal_shock_exit + 1e-3) {
+      if (P_amb <= P_exit_sup) warnings.push("Flow is underexpanded.");
+      else warnings.push("Flow is overexpanded (oblique shocks outside).");
+      return { success: true, results: res_choked_sup, warnings, components };
+    }
+
+    // B3: NORMAL SHOCK INSIDE
+    warnings.push("Normal shock detected inside.");
+
+    // Function to split pipeline and evaluate with shock at x_shock
+    const splitAndEvaluate = (x_shock) => {
+      const splitComps = Solver.splitPipelineAtX(components, x_shock);
+      return Solver.evaluatePipeline(splitComps, M_in_choked, P0_in, T0_in, gas, true);
+    };
+
+    const obj_shock = (x) => {
+      try {
+        const res = splitAndEvaluate(x);
+        return res[res.length - 1].P_out - P_amb;
+      } catch (e) { return -1e9; }
+    };
+
+    // Find shock location (search components from exit to inlet)
+    let totalL = components.reduce((sum, c) => sum + (c.params.length || 0), 0);
+    let curX = totalL;
+    
+    for (let i = components.length - 1; i >= 0; i--) {
+      const comp = components[i];
+      const L = comp.params.length || 0;
+      const x_low = curX - L + 1e-6;
+      const x_high = curX - 1e-6;
+
+      if (comp.type === "divergent" || comp.type === "fanno" || comp.type === "rayleigh") {
+          try {
+              const val_low = obj_shock(x_low);
+              const val_high = obj_shock(x_high);
+              if (val_low * val_high <= 0) {
+                  let low = x_low, high = x_high;
+                  for (let j = 0; j < 50; j++) {
+                      let mid = (low + high) / 2;
+                      if (obj_shock(mid) < 0) high = mid; else low = mid;
+                  }
+                  const finalComps = Solver.splitPipelineAtX(components, low);
+                  return { success: true, results: splitAndEvaluate(low), warnings, components: finalComps };
+              }
+          } catch (e) {}
+      }
+      curX -= L;
+    }
+
+    return { success: true, results: res_choked_sup, warnings, components };
+  },
+
+  splitPipelineAtX: (components, x_shock) => {
+    let newComps = [];
+    let curX = 0;
+    for (const comp of components) {
+      const L = comp.params.length || 0;
+      if (curX <= x_shock && x_shock < curX + L && comp.type !== "normal_shock") {
+        const dx = x_shock - curX;
+        if (dx > 1e-6) {
+          const c1 = { ...comp, params: { ...comp.params, length: dx } };
+          if (comp.type === "convergent" || comp.type === "divergent") {
+            c1.params.d_out = comp.params.d_in + (comp.params.d_out - comp.params.d_in) * (dx / L);
+          }
+          newComps.push(c1);
+        }
+        newComps.push({ type: "normal_shock", params: { length: 0 } });
+        if (L - dx > 1e-6) {
+          const c2 = { ...comp, params: { ...comp.params, length: L - dx } };
+          if (comp.type === "convergent" || comp.type === "divergent") {
+            c2.params.d_in = comp.params.d_in + (comp.params.d_out - comp.params.d_in) * (dx / L);
+          }
+          newComps.push(c2);
+        }
+      } else {
+        newComps.push({ ...comp });
+      }
+      curX += L;
+    }
+    return newComps;
   },
 
   generatePlotData: (components, results, gas, numPoints = 50) => {
