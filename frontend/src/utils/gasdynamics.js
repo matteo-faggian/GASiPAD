@@ -569,6 +569,7 @@ export const Solver = {
       else if (comp.type === "fanno" || comp.type === "rayleigh") A_init = gas.areaFromDiameter(comp.params.d_h);
       else A_init = 0.01; // Fallback
 
+      const A_star = A_init / Isentropic.areaMachRatio(res.M_in, gas.gamma);
       let mdot_init = gas.density(P_init, T_init) * (res.M_in * gas.speedOfSound(T_init)) * A_init;
 
       let y = [M2_init, P_init, T_init, mdot_init];
