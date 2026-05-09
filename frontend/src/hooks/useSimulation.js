@@ -57,6 +57,7 @@ export function useSimulation() {
       
     } catch (err) {
       console.error(err);
+      alert("ERRORE SIMULAZIONE: " + err.message);
       setError(err.message);
     } finally {
       setLoading(false);
