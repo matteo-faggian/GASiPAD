@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaspad-v2';
+const CACHE_NAME = 'gaspad-v3';
 
 // Strategia: Cache First per gli asset statici, Network First per il resto
 self.addEventListener('install', (event) => {
