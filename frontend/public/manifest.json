@@ -1,0 +1,18 @@
+{
+  "short_name": "GASPAD",
+  "name": "Gas Dynamics Pro Simulator",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "orientation": "any",
+  "description": "Professional Gas Dynamics Simulator for Aerospace Engineering"
+}
