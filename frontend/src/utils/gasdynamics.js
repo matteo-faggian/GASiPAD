@@ -143,6 +143,13 @@ export const Solver = {
       out.P0_out = P0_in * NormalShock.stagnationPressureRatio(M_in, k);
       out.T0_out = T0_in;
     }
+    else if (comp.type === "solid_grain") {
+      const rho_b = comp.params.rho_b || 0, A_b = comp.params.A_b || 0, n = comp.params.n || 0, a_coeff = comp.params.a_coeff || 0;
+      const P_ref = P0_in * Isentropic.pressureRatio(M_in, k);
+      const grain_mdot = A_b * rho_b * a_coeff * Math.pow(P_ref / 1e6, n);
+      out.M_out = M_in; out.P0_out = P0_in; out.T0_out = T0_in;
+      out.grain_mdot = grain_mdot;
+    }
 
     out.P_out = out.P0_out * Isentropic.pressureRatio(out.M_out, k);
     out.T_out = out.T0_out * Isentropic.temperatureRatio(out.M_out, k);
