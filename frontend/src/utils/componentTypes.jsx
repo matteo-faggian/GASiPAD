@@ -1,5 +1,4 @@
 import React from 'react';
-import { v4 as uuidv4 } from 'uuid';
 
 export const COMPONENT_TYPES = {
   convergent: {
@@ -62,6 +61,8 @@ export const COMPONENT_TYPES = {
   }
 };
 
+const generateId = () => `comp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
 export const createComponent = (type, prevDOut = null) => {
   const params = { ...COMPONENT_TYPES[type].defaultParams };
   
@@ -76,7 +77,7 @@ export const createComponent = (type, prevDOut = null) => {
   }
   
   return {
-    id: uuidv4(),
+    id: generateId(),
     type,
     params
   };

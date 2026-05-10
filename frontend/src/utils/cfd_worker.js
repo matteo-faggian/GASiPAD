@@ -171,7 +171,11 @@ function cfdCoreLoop(params) {
     return { U_curr_0, U_curr_1, U_curr_2, F_0, F_1, F_2 };
 }
 
-self.onmessage = function(e) {
-    const results = cfdCoreLoop(e.data);
-    self.postMessage(results);
-};
+self.addEventListener('message', function(e) {
+    try {
+        const results = cfdCoreLoop(e.data);
+        self.postMessage(results);
+    } catch (err) {
+        console.error("CFD Worker Error:", err);
+    }
+});
