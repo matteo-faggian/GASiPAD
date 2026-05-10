@@ -127,8 +127,10 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
   position: relative;
+  background-color: var(--bg-app);
 }
 
 @media (max-width: 1366px) {
@@ -143,17 +145,18 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .pipeline-container {
-  width: 100%;
-  max-width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
   min-height: 150px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 2rem;
+  padding: 1.5rem;
   border: 2px dashed rgba(255,255,255,0.1);
   border-radius: var(--radius-lg);
   background: rgba(0,0,0,0.2);
@@ -430,9 +433,10 @@
 
 .canvas-grid-layout {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 320px;
   gap: 2rem;
-  width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
   align-items: start;
 }
 
