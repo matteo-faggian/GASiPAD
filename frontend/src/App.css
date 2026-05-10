@@ -5,6 +5,7 @@
   width: 100%;
   background-color: var(--bg-app);
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 @media (max-width: 1024px) {
@@ -16,8 +17,7 @@
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: var(--glass-blur);
+  background: rgba(15, 23, 42, 0.98);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -35,8 +35,14 @@
 }
 
 .sidebar-header {
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
+}
+
+@media (max-width: 1024px) {
+  .sidebar-header {
+    padding: 0.75rem 1rem;
+  }
 }
 
 .sidebar-header h1 {
