@@ -15,7 +15,7 @@ export function Sidebar({ config, setConfig, onAddComponent, onSimulate, loading
   const handleConfigChange = (k, v) => setConfig({ ...config, [k]: v });
 
   return (
-    <div className="sidebar">
+    <>
       <div className="sidebar-header">
         <h1>⚡ Gas Dynamics Pro <span style={{ fontSize: '0.65em', color: 'var(--text-muted)', fontWeight: 400, verticalAlign: 'baseline', marginLeft: '6px' }}>(beta version)</span></h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '2px' }}>
@@ -240,6 +240,6 @@ export function Sidebar({ config, setConfig, onAddComponent, onSimulate, loading
           )}
         </button>
       </div>
-    </div>
+    </>
   );
 }
