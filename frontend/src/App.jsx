@@ -23,19 +23,31 @@ function App() {
   const { simulate, results, loading, error, clearResults } = useSimulation();
 
   const handleAddComponent = (type) => {
-    // Feedback aptico (pattern breve: vibra-pausa-vibra)
-    if (navigator.vibrate) {
-      navigator.vibrate([50, 30, 50]);
-    }
+    try {
+      // Feedback aptico protetto da try-catch per evitare crash su dispositivi con implementazioni buggate (es. Oppo/ColorOS)
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate([50, 30, 50]);
+        } catch (vErr) {
+          console.warn("Vibration failed, but app will continue:", vErr);
+        }
+      }
 
-    let lastDOut = null;
-    if (components.length > 0) {
-      const last = components[components.length - 1];
-      lastDOut = last.params.d_out || last.params.d_h;
+      let lastDOut = null;
+      if (components.length > 0) {
+        const last = components[components.length - 1];
+        lastDOut = last.params ? (last.params.d_out || last.params.d_h) : null;
+      }
+      
+      const newComp = createComponent(type, lastDOut);
+      if (newComp) {
+        setComponents(prev => [...prev, newComp]);
+        clearResults();
+      }
+    } catch (err) {
+      console.error("Critical error adding component:", err);
+      alert("Error adding component. Please try again.");
     }
-    
-    setComponents(prev => [...prev, createComponent(type, lastDOut)]);
-    clearResults();
   };
 
   const handleSimulate = () => {
