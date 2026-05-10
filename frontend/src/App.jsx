@@ -23,6 +23,11 @@ function App() {
   const { simulate, results, loading, error, clearResults } = useSimulation();
 
   const handleAddComponent = (type) => {
+    // Feedback aptico (vibrazione breve) per smartphone
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+
     let lastDOut = null;
     if (components.length > 0) {
       const last = components[components.length - 1];
