@@ -20,7 +20,6 @@ function App() {
   });
 
   const [components, setComponents] = useState([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { simulate, results, loading, error, clearResults } = useSimulation();
 
   const handleAddComponent = (type) => {
@@ -44,26 +43,12 @@ function App() {
       alert('Add at least one component to the pipeline before simulating.');
       return;
     }
-    setSidebarOpen(false); // Close sidebar on simulate for better view
     simulate(config, components);
   };
 
   return (
     <div className="app-container">
-      <div 
-        className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`} 
-        onClick={() => setSidebarOpen(false)}
-      />
-      
-      <button 
-        className="sidebar-toggle" 
-        onClick={() => setSidebarOpen(prev => !prev)}
-        title="Settings"
-      >
-        {sidebarOpen ? '✕' : '⚙️'}
-      </button>
-
-      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <div className="sidebar">
         <Sidebar
           config={config}
           setConfig={(c) => { setConfig(c); clearResults(); }}
