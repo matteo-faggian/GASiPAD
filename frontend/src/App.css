@@ -1,10 +1,16 @@
 .app-container {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   min-height: 100vh;
   width: 100%;
   background-color: var(--bg-app);
-  position: relative;
   overflow-x: hidden;
+}
+
+@media (max-width: 1366px) {
+  .app-container {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sidebar {
@@ -146,11 +152,11 @@
 
 .canvas-area {
   flex: 1;
-  padding: 2rem;
+  padding: 1.5rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  width: 100%;
 }
 
 .pipeline-container {
@@ -416,9 +422,24 @@
 /* Canvas wrapper */
 .canvas-wrapper {
   width: 100%;
-  max-width: 100%;
+  max-width: 100% !important;
   display: flex;
   flex-direction: column;
+}
+
+.canvas-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 2rem;
+  width: 100%;
+  align-items: start;
+}
+
+@media (max-width: 1366px) {
+  .canvas-grid-layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
 }
 
 /* Reservoir / Exit labels */

@@ -45,8 +45,7 @@ export function Canvas({ components, setComponents, config, results }) {
   return (
     <div className="canvas-area">
       <div className="canvas-wrapper">
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '2rem', width: '100%', alignItems: 'start' }}>
+        <div className="canvas-grid-layout">
           
           {/* LEFT COLUMN: Pipeline */}
           <div className="pipeline-column" style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
@@ -166,7 +165,6 @@ export function Canvas({ components, setComponents, config, results }) {
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>
