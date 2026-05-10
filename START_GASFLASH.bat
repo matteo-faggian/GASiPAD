@@ -13,8 +13,8 @@ echo.
 :: --- CONFIGURAZIONE ---
 set "ROOT=%~dp0"
 set "REPO_NAME=Iterative-1D-Gasdynamic-Solver"
-set "REPO_URL=https://github.com/Matteobeo/%REPO_NAME%"
-set "API_URL=https://api.github.com/repos/Matteobeo/%REPO_NAME%/commits/main"
+set "REPO_URL=https://github.com/matteo-faggian/%REPO_NAME%"
+set "API_URL=https://api.github.com/repos/matteo-faggian/%REPO_NAME%/commits/main"
 set "NEEDS_REBUILD=0"
 
 :: --- 1. CONTROLLO AGGIORNAMENTI ---
