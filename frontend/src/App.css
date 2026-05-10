@@ -274,12 +274,13 @@
 }
 
 .results-panel {
-  min-height: 400px;
+  min-height: 600px;
   background: var(--bg-panel);
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   transition: all 0.3s ease;
+  height: auto;
 }
 
 @media (max-width: 1366px) {
@@ -302,10 +303,12 @@
 
 .charts-container {
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 1px;
-  background: var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-app);
+  overflow-y: auto;
 }
 
 @media (max-width: 768px) {
@@ -326,9 +329,14 @@
 
 .chart-wrapper {
   background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   position: relative;
   width: 100%;
-  height: 100%;
+  height: 450px;
+  min-height: 450px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
 
 .status-badge {
