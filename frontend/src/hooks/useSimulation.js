@@ -29,29 +29,65 @@ export function useSimulation() {
         )
       }));
 
-      // 3. Run the Local Solver (Client-side)
-      const simulation = Solver.solveFullPipeline(
-        formattedComponents,
-        p(config.P0),
-        p(config.T0),
-        p(config.P_amb),
-        gas
-      );
+      let finalResponse = null;
 
-      // 4. Generate high-res plot data using the final components (including shocks)
-      const { data, boundaries, labels } = Solver.generatePlotData(simulation.components, simulation.results, gas);
-      
-      // 5. Compute summary using the final components
-      const summary = Solver.computeSummary(config, simulation.components, data, gas);
+      if (config.solver_type === 'analytical') {
+        // 3. Run the Local Solver (Client-side Analytical)
+        const simulation = Solver.solveFullPipeline(
+          formattedComponents,
+          p(config.P0),
+          p(config.T0),
+          p(config.P_amb),
+          gas
+        );
 
-      const finalResponse = {
-        success: true,
-        data: data,
-        component_boundaries: boundaries,
-        component_labels: labels,
-        summary: summary,
-        warnings: simulation.warnings
-      };
+        // 4. Generate high-res plot data
+        const { data, boundaries, labels } = Solver.generatePlotData(simulation.components, simulation.results, gas);
+        
+        // 5. Compute summary
+        const summary = Solver.computeSummary(config, simulation.components, data, gas);
+
+        finalResponse = {
+          success: true,
+          data: data,
+          component_boundaries: boundaries,
+          component_labels: labels,
+          summary: summary,
+          warnings: simulation.warnings
+        };
+      } else {
+        // 3. Run the CFD Solver (Web Worker)
+        const { CFDSolver } = await import('../utils/cfd_solver');
+        const cfdSolver = new CFDSolver(gas);
+        const results = await cfdSolver.solve(
+          formattedComponents,
+          p(config.P0),
+          p(config.T0),
+          p(config.P_amb)
+        );
+
+        // Calculate boundaries for charts (global X at end of each component)
+        let curX = 0;
+        const boundaries = [0];
+        const labels = [];
+        formattedComponents.forEach(c => {
+            curX += (c.params.length || 0);
+            boundaries.push(curX);
+            labels.push(c.type.toUpperCase());
+        });
+
+        // Compute summary from CFD data
+        const summary = Solver.computeSummary(config, formattedComponents, results, gas);
+
+        finalResponse = {
+          success: true,
+          data: results,
+          component_boundaries: boundaries,
+          component_labels: labels,
+          summary: summary,
+          warnings: ["CFD Solver Active (Steady-State Convergence)"]
+        };
+      }
 
       setResults(finalResponse);
       
