@@ -23,9 +23,9 @@ function App() {
   const { simulate, results, loading, error, clearResults } = useSimulation();
 
   const handleAddComponent = (type) => {
-    // Feedback aptico (vibrazione breve) per smartphone
+    // Feedback aptico (pattern breve: vibra-pausa-vibra)
     if (navigator.vibrate) {
-      navigator.vibrate(50);
+      navigator.vibrate([50, 30, 50]);
     }
 
     let lastDOut = null;
