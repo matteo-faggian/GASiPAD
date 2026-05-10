@@ -4,6 +4,13 @@
   min-height: 100vh;
   width: 100%;
   background-color: var(--bg-app);
+  overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+  .app-container {
+    flex-direction: column;
+  }
 }
 
 .sidebar {
@@ -17,9 +24,13 @@
   z-index: 100;
 }
 
-@media (max-width: 1366px) {
+@media (max-width: 1024px) {
   .sidebar {
-    border-right: 1px solid var(--border-color);
+    width: 100% !important;
+    min-width: 100% !important;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
   }
 }
 
@@ -441,6 +452,12 @@
   font-size: 0.7rem;
   opacity: 0.5;
   width: 100%;
+}
+
+@media (max-width: 768px) {
+  .footer-text {
+    display: none;
+  }
 }
 
 .canvas-grid-layout {
