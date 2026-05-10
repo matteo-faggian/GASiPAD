@@ -97,10 +97,10 @@ function App() {
             results={results} 
           />
         )}
+        <footer className="footer-text">
+          GASPAD Standalone v4.0 - Engine Active (No Cache)
+        </footer>
       </div>
-      <footer className="mt-8 text-center text-slate-500 text-xs pb-8">
-        GASPAD Standalone v4.0 - Engine Active (No Cache)
-      </footer>
     </div>
   );
 }

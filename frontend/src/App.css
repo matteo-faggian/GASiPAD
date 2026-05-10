@@ -433,6 +433,16 @@
   align-items: stretch !important;
 }
 
+.footer-text {
+  margin-top: auto;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  opacity: 0.5;
+  width: 100%;
+}
+
 .canvas-grid-layout {
   display: grid;
   grid-template-columns: 1fr 320px;
