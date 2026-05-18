@@ -97,11 +97,18 @@ export class CFDSolver {
                     } else if (comp.type === "solid_grain") {
                         const d_h = comp.params.d_h || 0.1;
                         A[i] = (Math.PI / 4) * d_h * d_h;
-                        
+
                         const rho_s = comp.params.rho_b || 1800;
                         const A_b = comp.params.A_b || 0.1;
                         const T_f = comp.params.T_b || 3000;
-                        
+
+                        // Warn if A_b is inconsistent with cylindrical geometry (pi*d_h*L)
+                        const A_b_cyl = Math.PI * d_h * L;
+                        if (A_b_cyl > 1e-12 && Math.abs(A_b - A_b_cyl) / A_b_cyl > 0.5 && !this._a_b_warned) {
+                            console.warn(`solid_grain: A_b=${A_b.toFixed(4)} m^2 differs >50% from cylindrical estimate pi*d_h*L=${A_b_cyl.toFixed(4)} m^2. Verify grain geometry.`);
+                            this._a_b_warned = true;
+                        }
+
                         let a_coeff, n_exp;
                         if (comp.params.only_mass_addition === 1) {
                             const target_mdot = comp.params.target_mass_flow || 2.0;
@@ -110,8 +117,11 @@ export class CFDSolver {
                         } else {
                             a_coeff = comp.params.a_coeff || 0.02;
                             n_exp = comp.params.n || 0.5;
+                            if (n_exp >= 1.0) {
+                                throw new Error(`solid_grain: pressure exponent n=${n_exp} >= 1 causes mesa-burning instability (positive pressure feedback). Use n < 1.`);
+                            }
                         }
-                        
+
                         grain_a[i] = a_coeff;
                         grain_n[i] = n_exp;
                         grain_S_m_factor[i] = (rho_s * A_b) / L;
@@ -150,6 +160,14 @@ export class CFDSolver {
 
         for (let i = 0; i < nx; i++) D[i] = Math.sqrt(4 * A[i] / Math.PI);
 
+        // Adaptive temporal relaxation for grain source: higher n -> smaller factor for stability
+        let max_n = 0.0;
+        for (let i = 0; i < nx; i++) if (grain_n[i] > max_n) max_n = grain_n[i];
+        let grain_relax;
+        if (max_n < 0.3)      grain_relax = 0.3;
+        else if (max_n < 0.7) grain_relax = 0.1;
+        else                  grain_relax = 0.05;
+
         // Initial Conditions
         const U_curr_0 = new Float64Array(nx);
         const U_curr_1 = new Float64Array(nx);
@@ -179,28 +197,33 @@ export class CFDSolver {
                 const temperature_total = new Float64Array(nx);
                 const mass_flow = new Float64Array(nx);
                 
-                // For smoothing mass flow like in Python
-                const mdot_smooth = new Float64Array(nx);
-                let mdot_acc = U_curr_1[0]; // Simplified
-                
+                // First pass: compute flow primitives (rho, u, p, T, M)
                 for (let i = 0; i < nx; i++) {
                     const rho_val = U_curr_0[i] / A[i];
                     const u_val = U_curr_1[i] / U_curr_0[i];
                     const p_val = (this.gamma - 1) * (U_curr_2[i] / A[i] - 0.5 * rho_val * u_val * u_val);
                     const a_val = Math.sqrt(this.gamma * p_val / rho_val);
                     const T_val = p_val / (rho_val * this.R);
-                    
+
                     mach[i] = u_val / a_val;
                     pressure[i] = p_val;
                     temperature[i] = T_val;
-                    
+
                     const M2 = mach[i] * mach[i];
                     temperature_total[i] = T_val * (1 + 0.5 * (this.gamma - 1) * M2);
                     pressure_total[i] = p_val * Math.pow(temperature_total[i] / T_val, this.gamma / (this.gamma - 1));
-                    
-                    // Smooth mass flow
-                    const S_m = grain_S_m_factor[i] * grain_a[i] * Math.pow(p_val / 1000000, grain_n[i]);
-                    if (i > 0) mdot_acc += S_m * dx_arr[i];
+                }
+
+                // Second pass: smooth mass flow with same 3-point stencil as CFD core
+                const mdot_smooth = new Float64Array(nx);
+                let mdot_acc = U_curr_1[0];
+                mdot_smooth[0] = mdot_acc;
+                for (let i = 1; i < nx; i++) {
+                    const i_prev = Math.max(0, i - 1);
+                    const i_next = Math.min(nx - 1, i + 1);
+                    const p_s_post = 0.25 * pressure[i_prev] + 0.5 * pressure[i] + 0.25 * pressure[i_next];
+                    const S_m = grain_S_m_factor[i] * grain_a[i] * Math.pow(p_s_post / 1000000, grain_n[i]);
+                    mdot_acc += S_m * dx_arr[i];
                     mdot_smooth[i] = mdot_acc;
                 }
 
@@ -229,7 +252,7 @@ export class CFDSolver {
                 U_curr_0, U_curr_1, U_curr_2, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D,
                 grain_a, grain_n, grain_S_m_factor, grain_h_st, dx_arr, nx,
                 gamma: this.gamma, R: this.R, max_iter: 150000, tol: 1e-7,
-                P0_in, T0_in, P_amb
+                P0_in, T0_in, P_amb, grain_relax
             });
         });
     }

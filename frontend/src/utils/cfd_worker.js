@@ -63,6 +63,8 @@ function cfdCoreLoop(params) {
     const { U_curr_0, U_curr_1, U_curr_2, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D,
             grain_a, grain_n, grain_S_m_factor, grain_h_st, dx_arr, nx, gamma, R, max_iter, tol,
             P0_in, T0_in, P_amb } = params;
+    // Default to historical value 0.1 if grain_relax not provided
+    const grain_relax = (typeof params.grain_relax === 'number') ? params.grain_relax : 0.1;
 
     const U_new_0 = new Float64Array(nx);
     const U_new_1 = new Float64Array(nx);
@@ -144,7 +146,7 @@ function cfdCoreLoop(params) {
             const S_m_target = grain_S_m_factor[i] * grain_a[i] * Math.pow(p_smooth / 1000000, grain_n[i]);
             
             if (it === 0) S_m_curr[i] = S_m_target;
-            else S_m_curr[i] = 0.1 * S_m_target + 0.9 * S_m_curr[i];
+            else S_m_curr[i] = grain_relax * S_m_target + (1.0 - grain_relax) * S_m_curr[i];
             
             const S_m = S_m_curr[i];
             
