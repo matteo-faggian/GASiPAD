@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from numba import njit, prange
 from typing import List, Dict, Tuple, Any
@@ -83,7 +84,7 @@ def roe_flux_numba_fixed(rhoL, uL, pL, rhoR, uR, pR, A_int, gamma):
 @njit(parallel=True, fastmath=True)
 def cfd_core_loop(U_curr, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D,
                   grain_a, grain_n, grain_S_m_factor, grain_h_st,
-                  dx_arr, nx, gamma, R, max_iter, tol, P0_in, T0_in, P_amb):
+                  dx_arr, nx, gamma, R, max_iter, tol, P0_in, T0_in, P_amb, grain_relax):
     
     U_new = np.empty_like(U_curr)
     F = np.zeros((3, nx + 1))
@@ -144,11 +145,10 @@ def cfd_core_loop(U_curr, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D
             # S_m = mass added per unit time and unit length [kg/(s*m)]
             S_m_target = grain_S_m_factor[i] * grain_a[i] * (p_smooth/1e6)**grain_n[i] 
             
-            # Temporal relaxation (Balanced: 10% new, 90% old)
             if it == 0: S_m_curr[i] = S_m_target
-            else: S_m_curr[i] = 0.1 * S_m_target + 0.9 * S_m_curr[i]
+            else: S_m_curr[i] = grain_relax * S_m_target + (1.0 - grain_relax) * S_m_curr[i]
             S_m = S_m_curr[i]
-            
+
             U_new[0, i] = max(U_star_0 + dt * S_m, 1e-6 * A[i])
             U_new[1, i] = (U_star_1 + dt * source_p) / (1.0 + dt * K_f)
             U_new[2, i] = max(U_star_2 + dt * source_q + dt * S_m * grain_h_st[i], 1e-5)
@@ -156,7 +156,7 @@ def cfd_core_loop(U_curr, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D
         if it > 5000 and it % 500 == 0:
             if np.max(np.abs(U_new[0] - U_curr[0])) / (np.max(np.abs(U_curr[0])) + 1e-10) < tol:
                 break
-                
+
         U_curr[:] = U_new[:]
 
     return U_curr, F
@@ -190,7 +190,7 @@ def rusanov_flux_real_gas(rhoL, uL, pL, EL, rhoR, uR, pR, ER, aL, aR, A_int):
 @njit(parallel=True, fastmath=True)
 def cfd_core_loop_real_gas(U_curr, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D,
                            grain_a, grain_n, grain_S_m_factor, grain_h_st,
-                           dx_arr, nx, R, cv, a_vdw, b_vdw, max_iter, tol, P0_in, T0_in, P_amb):
+                           dx_arr, nx, R, cv, a_vdw, b_vdw, max_iter, tol, P0_in, T0_in, P_amb, grain_relax):
     U_new = np.empty_like(U_curr)
     F = np.zeros((3, nx + 1))
     rho, u, p, a, T = np.zeros(nx), np.zeros(nx), np.zeros(nx), np.zeros(nx), np.zeros(nx)
@@ -281,7 +281,7 @@ def cfd_core_loop_real_gas(U_curr, A, A_int, f_fanning, q_heat, delta_h0, q_mode
             S_m_target = grain_S_m_factor[i] * grain_a[i] * (p_smooth/1e6)**grain_n[i]
             
             if it == 0: S_m_curr[i] = S_m_target
-            else: S_m_curr[i] = 0.1 * S_m_target + 0.9 * S_m_curr[i]
+            else: S_m_curr[i] = grain_relax * S_m_target + (1.0 - grain_relax) * S_m_curr[i]
             S_m = S_m_curr[i]
 
             U_new[0, i] = max(U_star_0 + dt * S_m, 1e-6 * A[i])
@@ -341,26 +341,37 @@ class GeneralSolver1D:
             elif comp.type == "solid_grain":
                 d_h = comp.params.get("d_h", 0.1)
                 A[mask_c], A_int[mask_i] = np.pi/4*d_h**2, np.pi/4*d_h**2
-                
-                # Vieille's Law Params (Keys matched with frontend/models)
+
                 rho_s = comp.params.get("rho_b", 1800.0)
-                A_b = comp.params.get("A_b", 0.1)
-                T_f = comp.params.get("T_b", 3000.0)
-                
+                A_b   = comp.params.get("A_b", 0.1)
+                T_f   = comp.params.get("T_b", 3000.0)
+
+                # Warn if A_b is inconsistent with cylindrical geometry (π·d_h·L)
+                A_b_cyl = np.pi * d_h * L
+                if A_b_cyl > 1e-12 and abs(A_b - A_b_cyl) / A_b_cyl > 0.5:
+                    warnings.warn(
+                        f"solid_grain: A_b={A_b:.4f} m^2 differs >50% from cylindrical estimate "
+                        f"pi*d_h*L={A_b_cyl:.4f} m^2. Verify grain geometry."
+                    )
+
                 only_mass = comp.params.get("only_mass_addition", 0)
                 if only_mass == 1:
                     target_mdot = comp.params.get("target_mass_flow", 2.0)
-                    # Fixed mass addition: mdot = rho_s * A_b * a_coeff * P^0
-                    # Therefore: a_coeff = mdot / (rho_s * A_b)
                     a_coeff = target_mdot / (rho_s * A_b) if (rho_s * A_b) > 0 else 0.0
                     n_exp = 0.0
                 else:
-                    a_coeff = comp.params.get("a_coeff", 0.02) # [m/(s*MPa^n)] standard
-                    n_exp = comp.params.get("n", 0.5)
-                
+                    a_coeff = comp.params.get("a_coeff", 0.02)
+                    n_exp   = comp.params.get("n", 0.5)
+                    if n_exp >= 1.0:
+                        raise ValueError(
+                            f"solid_grain: pressure exponent n={n_exp} >= 1 causes mesa-burning "
+                            f"instability (positive pressure feedback). Use n < 1."
+                        )
+
                 grain_a[mask_c] = a_coeff
                 grain_n[mask_c] = n_exp
                 grain_S_m_factor[mask_c] = (rho_s * A_b) / L
+                # h_st = cp·T_f (specific enthalpy of combustion products at flame temperature)
                 grain_h_st[mask_c] = (self.gamma * self.R / (self.gamma - 1)) * T_f
             else:
                 d_h = comp.params.get("d_h", 0.1)
@@ -373,7 +384,16 @@ class GeneralSolver1D:
             curr_x += L
         
         D = np.sqrt(4*A/np.pi)
-        
+
+        # Adaptive temporal relaxation for grain source: higher n → smaller factor for stability
+        max_n = float(np.max(grain_n)) if np.any(grain_n > 0) else 0.0
+        if max_n < 0.3:
+            grain_relax = 0.3
+        elif max_n < 0.7:
+            grain_relax = 0.1
+        else:
+            grain_relax = 0.05
+
         # --- 1. ESECUZIONE GAS IDEALE (Sempre eseguita) ---
         U_id = np.zeros((3, nx))
         rho_init_id, u_init_id = P0_in / (self.R * T0_in), 10.0
@@ -381,9 +401,10 @@ class GeneralSolver1D:
         U_id[1, :] = rho_init_id * u_init_id * A
         U_id[2, :] = (P0_in / (self.gamma - 1) + 0.5 * rho_init_id * u_init_id**2) * A
         
-        U_f_id, F_f_id = cfd_core_loop(U_id, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D, 
+        U_f_id, F_f_id = cfd_core_loop(U_id, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D,
                                         grain_a, grain_n, grain_S_m_factor, grain_h_st,
-                                        dx_arr, nx, self.gamma, self.R, max_iter, tol, P0_in, T0_in, P_amb)
+                                        dx_arr, nx, self.gamma, self.R, max_iter, tol, P0_in, T0_in, P_amb,
+                                        grain_relax)
         
         rho_id, u_id = U_f_id[0,:]/A, U_f_id[1,:]/U_f_id[0,:]
         p_id = np.maximum((self.gamma-1)*(U_f_id[2,:]/A - 0.5*rho_id*u_id**2), 1e-5)
@@ -397,7 +418,9 @@ class GeneralSolver1D:
         mdot_in_id = np.median(mdot_f_id[:max(1, nx//10)])
         mdot_smooth_id[0] = mdot_in_id
         for i in range(1, nx):
-            S_m = grain_S_m_factor[i] * grain_a[i] * (p_id[i]/1e6)**grain_n[i]
+            i_prev, i_next = max(0, i-1), min(nx-1, i+1)
+            p_s = 0.25 * p_id[i_prev] + 0.5 * p_id[i] + 0.25 * p_id[i_next]
+            S_m = grain_S_m_factor[i] * grain_a[i] * (p_s/1e6)**grain_n[i]
             mdot_smooth_id[i] = mdot_smooth_id[i-1] + S_m * dx_arr[i]
         
         def s(arr): return np.nan_to_num(arr, nan=0.0).tolist()
@@ -433,18 +456,29 @@ class GeneralSolver1D:
             cv = self.gas.cv
             a_vdw = self.gas.a
             b_vdw = self.gas.b
-            
+
             U_re = np.zeros((3, nx))
-            rho_init_re = P0_in / (self.R * T0_in)
+            # Use VdW approximation: ρ ≈ P / (RT + P·b) to be consistent with inlet BC
+            rho_init_re = max(P0_in / (self.R * T0_in + P0_in * b_vdw), 1e-6)
             E_init_re = rho_init_re * (cv * T0_in - a_vdw * rho_init_re) + 0.5 * rho_init_re * u_init_id**2
-            
+
             U_re[0, :] = rho_init_re * A
             U_re[1, :] = rho_init_re * u_init_id * A
             U_re[2, :] = E_init_re * A
-            
-            U_f_re, F_f_re = cfd_core_loop_real_gas(U_re, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D, 
-                                                   grain_a, grain_n, grain_S_m_factor, grain_h_st,
-                                                   dx_arr, nx, self.R, cv, a_vdw, b_vdw, max_iter, tol, P0_in, T0_in, P_amb)
+
+            # VdW-corrected grain injection enthalpy: h = cv·T - a·ρ_f + RT/(1-ρ_f·b)
+            grain_h_st_re = grain_h_st.copy()
+            for i in range(nx):
+                if grain_S_m_factor[i] > 0.0:
+                    T_f_i = grain_h_st[i] / (self.gamma * self.R / (self.gamma - 1))
+                    rho_f = max(P0_in / (self.R * T_f_i + P0_in * b_vdw), 1e-6)
+                    denom = max(1.0 - rho_f * b_vdw, 1e-10)
+                    grain_h_st_re[i] = cv * T_f_i - a_vdw * rho_f + self.R * T_f_i / denom
+
+            U_f_re, F_f_re = cfd_core_loop_real_gas(U_re, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D,
+                                                   grain_a, grain_n, grain_S_m_factor, grain_h_st_re,
+                                                   dx_arr, nx, self.R, cv, a_vdw, b_vdw, max_iter, tol, P0_in, T0_in, P_amb,
+                                                   grain_relax)
             p_re, T_re, M_re = post_process_real_gas(U_f_re, A, self.R, cv, a_vdw, b_vdw)
             
             gamma_eff = (cv + self.R) / cv
@@ -457,7 +491,9 @@ class GeneralSolver1D:
             mdot_in_re = np.median(mdot_f_re[:max(1, nx//10)])
             mdot_smooth_re[0] = mdot_in_re
             for i in range(1, nx):
-                S_m = grain_S_m_factor[i] * grain_a[i] * (p_re[i]/1e6)**grain_n[i]
+                i_prev, i_next = max(0, i-1), min(nx-1, i+1)
+                p_s = 0.25 * p_re[i_prev] + 0.5 * p_re[i] + 0.25 * p_re[i_next]
+                S_m = grain_S_m_factor[i] * grain_a[i] * (p_s/1e6)**grain_n[i]
                 mdot_smooth_re[i] = mdot_smooth_re[i-1] + S_m * dx_arr[i]
             
             results["real"] = {
