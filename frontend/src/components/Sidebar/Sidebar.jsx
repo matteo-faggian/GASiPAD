@@ -17,7 +17,7 @@ export function Sidebar({ config, setConfig, onAddComponent, onSimulate, loading
   return (
     <>
       <div className="sidebar-header">
-        <h1>⚡ Gas Dynamics Pro <span style={{ fontSize: '0.65em', color: 'var(--text-muted)', fontWeight: 400, verticalAlign: 'baseline', marginLeft: '6px' }}>(beta version)</span></h1>
+        <h1>⚡ Gas Dynamics Pro <span style={{ fontSize: '0.65em', color: 'var(--text-muted)', fontWeight: 400, verticalAlign: 'baseline', marginLeft: '6px' }}>V_1.3</span></h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '2px' }}>
            1D Steady-State Flow Simulator
         </p>
