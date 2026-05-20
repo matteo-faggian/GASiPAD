@@ -65,6 +65,8 @@ function cfdCoreLoop(params) {
             P0_in, T0_in, P_amb } = params;
     // Default to historical value 0.1 if grain_relax not provided
     const grain_relax = (typeof params.grain_relax === 'number') ? params.grain_relax : 0.1;
+    // Closed-end wall BC at inlet (e.g. head-end of solid rocket motor)
+    const wall_inlet = params.wall_inlet === true;
 
     const U_new_0 = new Float64Array(nx);
     const U_new_1 = new Float64Array(nx);
@@ -92,11 +94,17 @@ function cfdCoreLoop(params) {
         for (let i = 0; i <= nx; i++) {
             let rL, uL, pL, rR, uR, pR;
             if (i === 0) {
-                const u_ghost = u[0];
-                const T_in = T0_in / (1 + 0.5 * (gamma - 1) * Math.pow(u_ghost / a[0], 2));
-                const p_in = P0_in * Math.pow(T_in / T0_in, gamma / (gamma - 1));
-                const rho_in = p_in / (R * T_in);
-                rL = rho_in; uL = u_ghost; pL = p_in;
+                if (wall_inlet) {
+                    // Closed-end wall: reflective ghost cell (u mirrored, rho/p mirrored)
+                    rL = rho[0]; uL = -u[0]; pL = p[0];
+                } else {
+                    // Stagnation inflow BC (subsonic isentropic)
+                    const u_ghost = u[0];
+                    const T_in = T0_in / (1 + 0.5 * (gamma - 1) * Math.pow(u_ghost / a[0], 2));
+                    const p_in = P0_in * Math.pow(T_in / T0_in, gamma / (gamma - 1));
+                    const rho_in = p_in / (R * T_in);
+                    rL = rho_in; uL = u_ghost; pL = p_in;
+                }
                 rR = rho[0]; uR = u[0]; pR = p[0];
             } else if (i === nx) {
                 rL = rho[nx - 1]; uL = u[nx - 1]; pL = p[nx - 1];

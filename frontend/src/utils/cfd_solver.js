@@ -168,12 +168,20 @@ export class CFDSolver {
         else if (max_n < 0.7) grain_relax = 0.1;
         else                  grain_relax = 0.05;
 
+        // Detect closed-end wall BC: first physical component is a solid grain
+        // (head-end of a solid rocket motor — no upstream flow).
+        const first_phys = components.find(c => c.type !== "normal_shock");
+        const wall_inlet = first_phys && first_phys.type === "solid_grain";
+        if (wall_inlet) {
+            console.log("solid_grain at inlet → using closed-end wall BC (u=0 at head-end)");
+        }
+
         // Initial Conditions
         const U_curr_0 = new Float64Array(nx);
         const U_curr_1 = new Float64Array(nx);
         const U_curr_2 = new Float64Array(nx);
         const rho_init = P0_in / (this.R * T0_in);
-        const u_init = 10.0;
+        const u_init = wall_inlet ? 0.0 : 10.0;
         
         for (let i = 0; i < nx; i++) {
             U_curr_0[i] = rho_init * A[i];
@@ -252,7 +260,7 @@ export class CFDSolver {
                 U_curr_0, U_curr_1, U_curr_2, A, A_int, f_fanning, q_heat, delta_h0, q_mode_total, D,
                 grain_a, grain_n, grain_S_m_factor, grain_h_st, dx_arr, nx,
                 gamma: this.gamma, R: this.R, max_iter: 150000, tol: 1e-7,
-                P0_in, T0_in, P_amb, grain_relax
+                P0_in, T0_in, P_amb, grain_relax, wall_inlet
             });
         });
     }

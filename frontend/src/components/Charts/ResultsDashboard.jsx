@@ -42,9 +42,15 @@ export function ResultsDashboard({ results }) {
     { x: d.x, y: d.pressure, type: 'scatter', mode: 'lines', name: 'Static P (Ideal)', line: { color: '#3b82f6', width: 2 } },
     { x: d.x, y: d.pressure_total, type: 'scatter', mode: 'lines', name: 'Total P0 (Ideal)', line: { color: '#8b5cf6', width: 2, dash: 'dash' } }
   ];
+  if (d.pressure_critical) {
+    pressureData.push({ x: d.x, y: d.pressure_critical, type: 'scatter', mode: 'lines', name: 'Critical P* (Ideal)', line: { color: '#ef4444', width: 2, dash: 'dot' } });
+  }
   if (d.real) {
     pressureData.push({ x: d.x, y: d.real.pressure, type: 'scatter', mode: 'lines', name: 'Static P (Real)', line: { color: 'rgba(59, 130, 246, 0.5)', width: 3 } });
     pressureData.push({ x: d.x, y: d.real.pressure_total, type: 'scatter', mode: 'lines', name: 'Total P0 (Real)', line: { color: 'rgba(139, 92, 246, 0.5)', width: 3, dash: 'dash' } });
+    if (d.real.pressure_critical) {
+      pressureData.push({ x: d.x, y: d.real.pressure_critical, type: 'scatter', mode: 'lines', name: 'Critical P* (Real)', line: { color: 'rgba(239, 68, 68, 0.5)', width: 3, dash: 'dot' } });
+    }
   }
 
   const machData = [

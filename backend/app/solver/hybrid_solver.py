@@ -283,17 +283,23 @@ def generate_plot_data(
 
     boundaries = _component_boundaries(components)
 
+    gamma = gas.gamma
+    p_star_ratio = (2 / (gamma + 1)) ** (gamma / (gamma - 1))
+    
     data = {
         "x":                cfd_data["x"],
         "mach":             cfd_data["mach"],
         "pressure":         cfd_data["pressure"],
         "pressure_total":   cfd_data["pressure_total"],
+        "pressure_critical": [p0 * p_star_ratio for p0 in cfd_data["pressure_total"]],
         "temperature":      cfd_data["temperature"],
         "temperature_total": cfd_data["temperature_total"],
         "mass_flow":        cfd_data["mass_flow"],
     }
     if "real" in cfd_data:
         data["real"] = cfd_data["real"]
+        if "pressure_total" in data["real"]:
+            data["real"]["pressure_critical"] = [p0 * p_star_ratio for p0 in data["real"]["pressure_total"]]
         
     # Generate human-readable labels for components
     labels = []
