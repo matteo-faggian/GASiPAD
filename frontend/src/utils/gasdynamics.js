@@ -145,8 +145,9 @@ export const Solver = {
   },
 
   generatePlotData: (components, results, gas, numPoints = 150) => {
-    const data = { x: [], mach: [], pressure: [], pressure_total: [], temperature: [], temperature_total: [], mass_flow: [] };
+    const data = { x: [], mach: [], pressure: [], pressure_total: [], pressure_critical: [], temperature: [], temperature_total: [], mass_flow: [] };
     let curX_global = 0, boundaries = [0], labels = [], k = gas.gamma;
+    const p_star_ratio = Math.pow(2 / (k + 1), k / (k - 1));
 
     let M_in = results[0].M_in;
     let T_in = results[0].T0_in * Isentropic.temperatureRatio(M_in, k);
@@ -167,9 +168,11 @@ export const Solver = {
             const T_ratio = (1 + (k-1)/2*M_u*M_u) / (1 + (k-1)/2*rel*rel); // T2/T1 from T0 const
             state = [rel*rel, state[1]*P_ratio, state[2]*T_ratio, state[3]];
         }
-        data.x.push(curX_global); data.mach.push(Math.sqrt(state[0])); data.pressure.push(state[1]);
-        data.pressure_total.push(state[1] / Isentropic.pressureRatio(Math.sqrt(state[0]), k));
-        data.temperature.push(state[2]); data.temperature_total.push(state[2] / Isentropic.temperatureRatio(Math.sqrt(state[0]), k));
+        const M_val = Math.sqrt(state[0]);
+        const P0_val = state[1] / Isentropic.pressureRatio(M_val, k);
+        data.x.push(curX_global); data.mach.push(M_val); data.pressure.push(state[1]);
+        data.pressure_total.push(P0_val); data.pressure_critical.push(P0_val * p_star_ratio);
+        data.temperature.push(state[2]); data.temperature_total.push(state[2] / Isentropic.temperatureRatio(M_val, k));
         data.mass_flow.push(state[3]);
         continue;
       }
@@ -192,7 +195,8 @@ export const Solver = {
         const T0 = state[2] / Isentropic.temperatureRatio(M, k);
         const P0 = state[1] / Isentropic.pressureRatio(M, k);
         data.x.push(curX_global + j * h); data.mach.push(M); data.pressure.push(state[1]);
-        data.pressure_total.push(P0); data.temperature.push(state[2]);
+        data.pressure_total.push(P0); data.pressure_critical.push(P0 * p_star_ratio);
+        data.temperature.push(state[2]);
         data.temperature_total.push(T0); data.mass_flow.push(state[3]);
         if (j < numPoints - 1) state = Solver.rk4Step(deriv, j * h, state, h);
       }

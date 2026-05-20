@@ -189,10 +189,16 @@ export class CFDSolver {
             U_curr_2[i] = (P0_in / (this.gamma - 1) + 0.5 * rho_init * u_init * u_init) * A[i];
         }
 
-        return new Promise((resolve, reject) => {
-            // In Vite, we can use the ?worker suffix for worker imports
-            // But for a dynamic creation, we can use URL
-            const worker = new Worker(new URL('./cfd_worker.js', import.meta.url));
+        return new Promise(async (resolve, reject) => {
+            let worker;
+            try {
+                // In Vite, ?worker ensures the worker is correctly built and its path resolved (especially on GH Pages)
+                const CFDWorker = (await import('./cfd_worker.js?worker')).default;
+                worker = new CFDWorker();
+            } catch (err) {
+                // Fallback for standard module loading if needed
+                worker = new Worker(new URL('./cfd_worker.js', import.meta.url));
+            }
             
             worker.onmessage = (e) => {
                 const { U_curr_0, U_curr_1, U_curr_2, F_0, F_1, F_2 } = e.data;
@@ -201,10 +207,13 @@ export class CFDSolver {
                 const mach = new Float64Array(nx);
                 const pressure = new Float64Array(nx);
                 const pressure_total = new Float64Array(nx);
+                const pressure_critical = new Float64Array(nx);
                 const temperature = new Float64Array(nx);
                 const temperature_total = new Float64Array(nx);
                 const mass_flow = new Float64Array(nx);
                 
+                const p_star_ratio = Math.pow(2 / (this.gamma + 1), this.gamma / (this.gamma - 1));
+
                 // First pass: compute flow primitives (rho, u, p, T, M)
                 for (let i = 0; i < nx; i++) {
                     const rho_val = U_curr_0[i] / A[i];
@@ -220,6 +229,7 @@ export class CFDSolver {
                     const M2 = mach[i] * mach[i];
                     temperature_total[i] = T_val * (1 + 0.5 * (this.gamma - 1) * M2);
                     pressure_total[i] = p_val * Math.pow(temperature_total[i] / T_val, this.gamma / (this.gamma - 1));
+                    pressure_critical[i] = pressure_total[i] * p_star_ratio;
                 }
 
                 // Second pass: smooth mass flow with same 3-point stencil as CFD core
@@ -241,6 +251,7 @@ export class CFDSolver {
                     mach: Array.from(mach),
                     pressure: Array.from(pressure),
                     pressure_total: Array.from(pressure_total),
+                    pressure_critical: Array.from(pressure_critical),
                     temperature: Array.from(temperature),
                     temperature_total: Array.from(temperature_total),
                     mass_flow: Array.from(mdot_smooth),
